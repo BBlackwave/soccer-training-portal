@@ -3,7 +3,37 @@ import { useState } from "react";
 const AIRTABLE_BASE_ID = "app0CglR4la9Jalnw";
 const USERS_TABLE_ID = "tblNMcBKZ8qnY9gRs";
 const SESSION_LOGS_TABLE_ID = "tbl5GtDcTbdhN7i0t";
+const AIRTABLE_API_KEY = "patvHfCFvJbD0hKUA.08bcff4a70feac08456e9147bd64e4d76deeec47aff9158b316eb44bf6273df9";
 const AIRTABLE_MCP = { type: "url", url: "https://mcp.airtable.com/mcp", name: "airtable-mcp" };
+
+async function airtableFetch(path, options = {}) {
+  const res = await fetch(`https://api.airtable.com/v0/${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${AIRTABLE_API_KEY}`,
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  return res.json();
+}
+
+async function loginFromAirtable(email, password) {
+  const formula = encodeURIComponent(`AND({Email}="${email.trim().toLowerCase()}",{Password}="${password}",{Status}="Active")`);
+  const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}?filterByFormula=${formula}`);
+  if (!data.records || data.records.length === 0) return null;
+  const r = data.records[0];
+  const f = r.fields;
+  return {
+    id: r.id,
+    name: f["Name"] || "",
+    email: f["Email"] || "",
+    role: f["Role"] || "",
+    playerId: f["Linked Player ID"] || "",
+    childId: f["Linked Player ID"] || "",
+    childName: f["Linked Player Name"] || "",
+  };
+}
 
 const PLAYERS_DATA = [
   {
@@ -134,15 +164,9 @@ function Login({ onLogin, onRequestAccess }) {
     if (!email || !password) { setError("Please enter email and password."); return; }
     setLoading(true); setError("");
     try {
-      const result = await callClaude(
-        `Search Airtable base ${AIRTABLE_BASE_ID}, table ${USERS_TABLE_ID} for a record where Email = "${email.trim().toLowerCase()}" AND Password = "${password}" AND Status = "Active". Return ONLY a JSON object with these exact fields or null if not found: {"id":"record_id","name":"Name value","email":"Email value","role":"Role value","playerId":"Linked Player ID value","childId":"Linked Player ID value","childName":"Linked Player Name value"}`
-      );
-      const match = result.match(/\{[\s\S]*\}/);
-      if (match) {
-        const user = JSON.parse(match[0]);
-        if (user && user.id) { onLogin(user); }
-        else { setError("Invalid email or password."); }
-      } else { setError("Invalid email or password."); }
+      const user = await loginFromAirtable(email, password);
+      if (user) { onLogin(user); }
+      else { setError("Invalid email or password."); }
     } catch { setError("Connection error. Try again."); }
     setLoading(false);
   };
