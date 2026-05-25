@@ -961,9 +961,9 @@ function PlayerProfile({ player, canEdit = false }) {
 
 // ─── ASSESSMENT FORM ──────────────────────────────────────────────────────────
 const PHYSICAL_TESTS = [
-  { key: "sprint10", label: "10 Yard Sprint", unit: "seconds", field: "Sprint 10 Yard (seconds)" },
-  { key: "sprint40", label: "40 Yard Sprint", unit: "seconds", field: "Sprint 40 Yard (seconds)" },
-  { key: "shuttle", label: "5-10-5 Shuttle", unit: "seconds", field: "5-10-5 Shuttle (seconds)" },
+  { key: "sprint10", label: "10 Yard Sprint", unit: "seconds", field: "Sprint 10 Yard CORRECT" },
+  { key: "sprint40", label: "40 Yard Sprint", unit: "seconds", field: "Sprint 40 Yard CORRECT" },
+  { key: "shuttle", label: "5-10-5 Shuttle", unit: "seconds", field: "Shuttle 5-10-5 CORRECT" },
   { key: "vertJump", label: "Vertical Jump", unit: "inches", field: "Vertical Jump (inches)" },
   { key: "broadJump", label: "Broad Jump", unit: "inches", field: "Broad Jump (inches)" },
   { key: "pushUps", label: "Push Ups", unit: "reps", field: "Push Ups (reps)" },
