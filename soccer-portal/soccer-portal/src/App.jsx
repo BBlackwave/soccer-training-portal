@@ -781,38 +781,47 @@ function PlayerProfile({ player, canEdit = false }) {
   const loadProfile = async () => {
     setLoading(true);
     try {
-      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua/${player.id}`);
-      if (data.fields) {
-        setProfile(data.fields);
+      const formula = encodeURIComponent(`RECORD_ID()="${player.id}"`);
+      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua?filterByFormula=${formula}`);
+      if (data.records && data.records.length > 0) {
+        const fields = data.records[0].fields;
+        setProfile(fields);
         setForm({
-          height: data.fields["Height (inches)"] || "",
-          weight: data.fields["Weight lbs"] || "",
-          position: data.fields["Player Position"] || "",
-          foot: data.fields["Preferred Foot"] || "",
-          jersey: data.fields["Jersey No"] || "",
-          dob: data.fields["Date of Birth"] || "",
+          height: fields["Height (inches)"] || "",
+          weight: fields["Weight lbs"] || "",
+          position: fields["Player Position"] || "",
+          foot: fields["Preferred Foot"] || "",
+          jersey: fields["Jersey No"] || "",
+          dob: fields["Date of Birth"] || "",
         });
+      } else {
+        setProfile({});
       }
-    } catch {}
+    } catch (e) {
+      console.error("Profile load error:", e);
+      setProfile({});
+    }
     setLoading(false);
   };
 
   const saveProfile = async () => {
     setSaving(true);
     try {
-      await airtableFetch(`${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua/${player.id}`, {
+      const fields = {};
+      if (form.height) fields["Height (inches)"] = parseFloat(form.height);
+      if (form.weight) fields["Weight lbs"] = parseFloat(form.weight);
+      if (form.position) fields["Player Position"] = form.position;
+      if (form.foot) fields["Preferred Foot"] = form.foot;
+      if (form.jersey) fields["Jersey No"] = parseInt(form.jersey);
+      if (form.dob) fields["Date of Birth"] = form.dob;
+      await airtableFetch(`${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua`, {
         method: "PATCH",
-        body: JSON.stringify({ fields: {
-          "Height (inches)": parseFloat(form.height) || null,
-          "Weight lbs": parseFloat(form.weight) || null,
-          "Player Position": form.position || null,
-          "Preferred Foot": form.foot || null,
-          "Jersey No": parseInt(form.jersey) || null,
-          "Date of Birth": form.dob || null,
-        }}),
+        body: JSON.stringify({ records: [{ id: player.id, fields }] }),
       });
       setSaved(true); setEditing(false); loadProfile();
-    } catch {}
+    } catch (e) {
+      console.error("Save error:", e);
+    }
     setSaving(false);
   };
 
@@ -836,7 +845,18 @@ function PlayerProfile({ player, canEdit = false }) {
     return `${ft}'${inch}" (${inches}")`;
   };
 
-  if (loading) return <div style={{ padding: 20, color: C.textMuted, textAlign: "center" }}>Loading profile...</div>;
+  if (loading) return (
+    <div style={{ padding: 40, color: C.textMuted, textAlign: "center" }}>
+      <div style={{ fontSize: 24, marginBottom: 8 }}>⏳</div>
+      <div>Loading profile...</div>
+    </div>
+  );
+  if (profile === null) return (
+    <div style={{ padding: 40, color: C.textMuted, textAlign: "center" }}>
+      <div style={{ fontSize: 24, marginBottom: 8 }}>❌</div>
+      <div>Could not load profile. Check your connection.</div>
+    </div>
+  );
 
   return (
     <div style={{ padding: "12px 14px" }}>
