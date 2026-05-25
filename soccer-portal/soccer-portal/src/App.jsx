@@ -914,7 +914,7 @@ function PlayerProfile({ player, canEdit = false }) {
         <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 16 }}>
           <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 12, fontFamily: "monospace" }}>EDIT PROFILE</div>
           {[
-            { label: "HEIGHT (inches)", key: "height", type: "number", placeholder: 'e.g. 68 for 5'8"' },
+            { label: "HEIGHT (inches)", key: "height", type: "number", placeholder: "e.g. 68 for 5ft 8in" },
             { label: "WEIGHT (lbs)", key: "weight", type: "number", placeholder: "e.g. 145" },
             { label: "DATE OF BIRTH", key: "dob", type: "date", placeholder: "" },
             { label: "JERSEY NUMBER", key: "jersey", type: "number", placeholder: "e.g. 10" },
