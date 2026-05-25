@@ -689,7 +689,7 @@ function CoachDashboard({ user, onLogout }) {
               {["session", "assess", "profile"].map(v => (
                 <button key={v} onClick={() => setPlayerDetailView(v)}
                   style={{ background: playerDetailView === v ? selectedPlayer.color : C.darkBorder, color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                  {v === "session" ? "📋 Session" : v === "assess" ? "📊 Assessment" : "👤 Profile"}
+                  {v === "session" ? "Session" : v === "assess" ? "Assessment" : "Profile"}
                 </button>
               ))}
             </div>
@@ -851,7 +851,7 @@ function PlayerProfile({ player, canEdit = false }) {
           {canEdit && (
             <button onClick={() => setEditing(!editing)}
               style={{ background: editing ? C.darkBorder : player.color, border: "none", borderRadius: 8, padding: "6px 14px", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-              {editing ? "Cancel" : "✏️ Edit"}
+              {editing ? "Cancel" : "Edit"}
             </button>
           )}
         </div>
@@ -1050,7 +1050,7 @@ function AssessmentForm({ player, readOnly = false }) {
 
       {/* History button */}
       <button onClick={loadHistory} style={btn(C.darkBorder, { width: "100%", marginBottom: 12, fontSize: 12, padding: "8px 12px" })}>
-        {loadingHistory ? "Loading..." : "📊 View Assessment History"}
+        {loadingHistory ? "Loading..." : "View Assessment History"}
       </button>
 
       {/* History */}
