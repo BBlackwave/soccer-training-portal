@@ -645,6 +645,7 @@ function CoachDashboard({ user, onLogout }) {
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [loggerPlayers, setLoggerPlayers] = useState([]);
   const [loggerView, setLoggerView] = useState(null);
+  const [playerDetailView, setPlayerDetailView] = useState("session");
 
   const tabs = [
     { id: "players", label: "Players" },
@@ -679,11 +680,21 @@ function CoachDashboard({ user, onLogout }) {
       )}
       {tab === "players" && selectedPlayer && (
         <div>
-          <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.darkBorder}`, display: "flex", gap: 10, alignItems: "center" }}>
-            <button onClick={() => setSelectedPlayer(null)} style={{ background: C.darkBorder, border: "none", borderRadius: 6, padding: "5px 10px", color: C.text, cursor: "pointer", fontSize: 12 }}>← Back</button>
-            <span style={{ color: C.text, fontWeight: 700 }}>{selectedPlayer.emoji} {selectedPlayer.name}</span>
+          <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.darkBorder}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <button onClick={() => setSelectedPlayer(null)} style={{ background: C.darkBorder, border: "none", borderRadius: 6, padding: "5px 10px", color: C.text, cursor: "pointer", fontSize: 12 }}>← Back</button>
+              <span style={{ color: C.text, fontWeight: 700 }}>{selectedPlayer.emoji} {selectedPlayer.name}</span>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {["session", "assess"].map(v => (
+                <button key={v} onClick={() => setPlayerDetailView(v)}
+                  style={{ background: playerDetailView === v ? selectedPlayer.color : C.darkBorder, color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                  {v === "session" ? "📋 Session" : "📊 Assessment"}
+                </button>
+              ))}
+            </div>
           </div>
-          <SessionLogger player={selectedPlayer} />
+          {playerDetailView === "session" ? <SessionLogger player={selectedPlayer} /> : <AssessmentForm player={selectedPlayer} />}
         </div>
       )}
       {tab === "session" && (
@@ -755,11 +766,191 @@ function CoachDashboard({ user, onLogout }) {
   );
 }
 
+// ─── ASSESSMENT FORM ──────────────────────────────────────────────────────────
+const PHYSICAL_TESTS = [
+  { key: "sprint10", label: "10 Yard Sprint", unit: "seconds", field: "Sprint 10 Yard (seconds)" },
+  { key: "sprint40", label: "40 Yard Sprint", unit: "seconds", field: "Sprint 40 Yard (seconds)" },
+  { key: "shuttle", label: "5-10-5 Shuttle", unit: "seconds", field: "5-10-5 Shuttle (seconds)" },
+  { key: "vertJump", label: "Vertical Jump", unit: "inches", field: "Vertical Jump (inches)" },
+  { key: "broadJump", label: "Broad Jump", unit: "inches", field: "Broad Jump (inches)" },
+  { key: "pushUps", label: "Push Ups", unit: "reps", field: "Push Ups (reps)" },
+  { key: "pullUps", label: "Pull Ups", unit: "reps", field: "Pull Ups (reps)" },
+  { key: "plank", label: "Plank Hold", unit: "seconds", field: "Plank Hold (seconds)" },
+  { key: "beepTest", label: "Beep Test", unit: "level", field: "Beep Test Level" },
+];
+const SOCCER_TESTS = [
+  { key: "passShort", label: "Passing Accuracy (Short)", unit: "%", field: "Passing Accuracy % (short)" },
+  { key: "passLong", label: "Passing Accuracy (Long)", unit: "%", field: "Passing Accuracy % (long)" },
+  { key: "shootPower", label: "Shooting Power", unit: "mph", field: "Shooting Power (mph)" },
+  { key: "shootAcc", label: "Shooting Accuracy", unit: "% (10 shots)", field: "Shooting Accuracy % (10 shots)" },
+  { key: "weakFoot", label: "Weak Foot Accuracy", unit: "% (10 shots)", field: "Weak Foot Accuracy % (10 shots)" },
+  { key: "dribble", label: "Dribble Speed Test", unit: "seconds", field: "Dribble Speed Test (seconds)" },
+  { key: "firstTouch", label: "First Touch Score", unit: "/ 10", field: "First Touch Score (10 attempts)" },
+];
+
+function AssessmentForm({ player, readOnly = false }) {
+  const [phase, setPhase] = useState("Baseline");
+  const [values, setValues] = useState({});
+  const [coachNotes, setCoachNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [history, setHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [activeSection, setActiveSection] = useState("physical");
+
+  const loadHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const formula = encodeURIComponent(`{Player ID}="${player.id}"`);
+      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/tbl4ksfh0hKXmy5gT?filterByFormula=${formula}&sort[0][field]=Assessment Date&sort[0][direction]=desc`);
+      if (data.records) setHistory(data.records);
+    } catch {}
+    setLoadingHistory(false);
+  };
+
+  const save = async () => {
+    setSaving(true); setError("");
+    const today = new Date().toISOString().split("T")[0];
+    const fields = {
+      "Assessment Title": `${player.name} — ${phase} — ${today}`,
+      "Player Name": player.name,
+      "Player ID": player.id,
+      "Assessment Date": today,
+      "Phase": phase,
+      "Coach Notes": coachNotes,
+    };
+    [...PHYSICAL_TESTS, ...SOCCER_TESTS].forEach(t => {
+      if (values[t.key] !== undefined && values[t.key] !== "") {
+        fields[t.field] = parseFloat(values[t.key]);
+      }
+    });
+    try {
+      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/tbl4ksfh0hKXmy5gT`, {
+        method: "POST",
+        body: JSON.stringify({ records: [{ fields }] }),
+      });
+      if (res.records) { setSaved(true); loadHistory(); }
+      else setError("Save failed. Try again.");
+    } catch { setError("Network error."); }
+    setSaving(false);
+  };
+
+  const allTests = [...PHYSICAL_TESTS, ...SOCCER_TESTS];
+
+  return (
+    <div style={{ padding: "12px 14px" }}>
+      {/* Header */}
+      <div style={{ background: player.color + "20", border: `1px solid ${player.color}44`, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
+        <div style={{ color: player.color, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>PERFORMANCE ASSESSMENT</div>
+        <div style={{ color: C.text, fontSize: 15, fontWeight: 700, marginTop: 2 }}>{player.emoji} {player.name}</div>
+        <div style={{ color: C.textMuted, fontSize: 11 }}>Physical + Soccer Skills · {allTests.length} tests</div>
+      </div>
+
+      {/* History button */}
+      <button onClick={loadHistory} style={btn(C.darkBorder, { width: "100%", marginBottom: 12, fontSize: 12, padding: "8px 12px" })}>
+        {loadingHistory ? "Loading..." : "📊 View Assessment History"}
+      </button>
+
+      {/* History */}
+      {history.length > 0 && (
+        <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>ASSESSMENT HISTORY</div>
+          {history.map((r, i) => (
+            <div key={r.id} style={{ borderBottom: i < history.length - 1 ? `1px solid ${C.darkBorder}` : "none", paddingBottom: 10, marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>{r.fields["Phase"] || "Assessment"}</span>
+                <span style={{ color: C.textMuted, fontSize: 11 }}>{r.fields["Assessment Date"]}</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                {allTests.filter(t => r.fields[t.field] !== undefined).map(t => (
+                  <div key={t.key} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                    <span style={{ color: C.textMuted, fontSize: 11 }}>{t.label}</span>
+                    <span style={{ color: player.color, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>{r.fields[t.field]} {t.unit}</span>
+                  </div>
+                ))}
+              </div>
+              {r.fields["Coach Notes"] && <div style={{ color: C.textMuted, fontSize: 11, marginTop: 6, fontStyle: "italic" }}>💬 {r.fields["Coach Notes"]}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!readOnly && (
+        <>
+          {/* Phase selector */}
+          <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>ASSESSMENT PHASE</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {["Baseline", "Phase 1 End", "Phase 2 End", "Phase 3 End", "Phase 4 End"].map(p => (
+                <button key={p} onClick={() => setPhase(p)}
+                  style={{ padding: "6px 12px", borderRadius: 16, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                    background: phase === p ? player.color : C.darkBorder, color: phase === p ? "#fff" : C.textMuted }}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Section tabs */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
+            {[{ id: "physical", label: "💪 Physical" }, { id: "soccer", label: "⚽ Soccer Skills" }].map(s => (
+              <button key={s.id} onClick={() => setActiveSection(s.id)}
+                style={{ flex: 1, padding: "8px 4px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                  background: activeSection === s.id ? player.color : C.darkBorder,
+                  color: activeSection === s.id ? "#fff" : C.textMuted }}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Test inputs */}
+          <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+            {(activeSection === "physical" ? PHYSICAL_TESTS : SOCCER_TESTS).map(t => (
+              <div key={t.key} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", marginBottom: 10 }}>
+                <div>
+                  <div style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{t.label}</div>
+                  <div style={{ color: C.textMuted, fontSize: 10, fontFamily: "monospace" }}>{t.unit}</div>
+                </div>
+                <input type="number" step="0.01" placeholder="—"
+                  value={values[t.key] || ""}
+                  onChange={e => setValues(prev => ({ ...prev, [t.key]: e.target.value }))}
+                  style={{ ...inp({ fontSize: 14, textAlign: "right", width: 90, fontWeight: 700, color: player.color }) }} />
+              </div>
+            ))}
+          </div>
+
+          {/* Coach notes */}
+          <div style={{ marginBottom: 12 }}>
+            <textarea placeholder="Coach notes for this assessment..." value={coachNotes} rows={3}
+              onChange={e => setCoachNotes(e.target.value)}
+              style={{ ...inp(), resize: "none", fontSize: 12 }} />
+          </div>
+
+          {/* Save */}
+          {error && <div style={{ color: C.danger, fontSize: 12, marginBottom: 8, textAlign: "center" }}>{error}</div>}
+          {saved ? (
+            <div style={{ background: C.success + "20", border: `1px solid ${C.success}`, borderRadius: 10, padding: 14, textAlign: "center" }}>
+              <div style={{ fontSize: 20 }}>✅</div>
+              <div style={{ color: C.success, fontWeight: 700, marginTop: 4 }}>Assessment saved to Airtable!</div>
+            </div>
+          ) : (
+            <button onClick={save} disabled={saving}
+              style={btn(player.color, { width: "100%", padding: 14, fontSize: 14 })}>
+              {saving ? "Saving..." : `Save ${phase} Assessment`}
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── PLAYER DASHBOARD ─────────────────────────────────────────────────────────
 function PlayerDashboard({ user, onLogout }) {
   const player = PLAYERS_DATA.find(p => p.id === user.playerId);
   const [tab, setTab] = useState("plan");
-  const tabs = [{ id: "plan", label: "My Plan" }, { id: "log", label: "Log Session" }];
+  const tabs = [{ id: "plan", label: "My Plan" }, { id: "log", label: "Log Session" }, { id: "assessment", label: "My Assessment" }];
   if (!player) return <div style={{ padding: 20, color: C.textMuted }}>No training plan found.</div>;
   return (
     <div>
@@ -782,6 +973,7 @@ function PlayerDashboard({ user, onLogout }) {
         </div>
       )}
       {tab === "log" && <SessionLogger player={player} />}
+      {tab === "assessment" && <AssessmentForm player={player} readOnly={true} />}
     </div>
   );
 }
@@ -790,7 +982,7 @@ function PlayerDashboard({ user, onLogout }) {
 function ParentDashboard({ user, onLogout }) {
   const player = PLAYERS_DATA.find(p => p.id === user.childId);
   const [tab, setTab] = useState("overview");
-  const tabs = [{ id: "overview", label: "Overview" }, { id: "plan", label: "Training Plan" }];
+  const tabs = [{ id: "overview", label: "Overview" }, { id: "plan", label: "Training Plan" }, { id: "assessment", label: "Assessment" }];
   if (!player) return <div style={{ padding: 20, color: C.textMuted }}>No player data found.</div>;
   return (
     <div>
@@ -814,6 +1006,7 @@ function ParentDashboard({ user, onLogout }) {
           </div>
         </div>
       )}
+      {tab === "assessment" && <AssessmentForm player={player} readOnly={true} />}
       {tab === "plan" && (
         <div style={{ padding: 16 }}>
           <div style={{ color: C.text, fontSize: 16, fontWeight: 800, marginBottom: 16 }}>Training Plan</div>
