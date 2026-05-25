@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const AIRTABLE_BASE_ID = "app0CglR4la9Jalnw";
 const USERS_TABLE_ID = "tblNMcBKZ8qnY9gRs";
@@ -686,15 +686,15 @@ function CoachDashboard({ user, onLogout }) {
               <span style={{ color: C.text, fontWeight: 700 }}>{selectedPlayer.emoji} {selectedPlayer.name}</span>
             </div>
             <div style={{ display: "flex", gap: 6 }}>
-              {["session", "assess"].map(v => (
+              {["session", "assess", "profile"].map(v => (
                 <button key={v} onClick={() => setPlayerDetailView(v)}
                   style={{ background: playerDetailView === v ? selectedPlayer.color : C.darkBorder, color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                  {v === "session" ? "📋 Session" : "📊 Assessment"}
+                  {v === "session" ? "📋 Session" : v === "assess" ? "📊 Assessment" : "👤 Profile"}
                 </button>
               ))}
             </div>
           </div>
-          {playerDetailView === "session" ? <SessionLogger player={selectedPlayer} /> : <AssessmentForm player={selectedPlayer} />}
+          {playerDetailView === "session" ? <SessionLogger player={selectedPlayer} /> : playerDetailView === "assess" ? <AssessmentForm player={selectedPlayer} /> : <PlayerProfile player={selectedPlayer} canEdit={true} />}
         </div>
       )}
       {tab === "session" && (
@@ -762,6 +762,207 @@ function CoachDashboard({ user, onLogout }) {
         </div>
       )}
       {tab === "users" && <ManageUsers />}
+    </div>
+  );
+}
+
+
+// ─── PLAYER PROFILE ───────────────────────────────────────────────────────────
+function PlayerProfile({ player, canEdit = false }) {
+  const [profile, setProfile] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadProfile(); }, []);
+
+  const loadProfile = async () => {
+    setLoading(true);
+    try {
+      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua/${player.id}`);
+      if (data.fields) {
+        setProfile(data.fields);
+        setForm({
+          height: data.fields["Height (inches)"] || "",
+          weight: data.fields["Weight lbs"] || "",
+          position: data.fields["Player Position"] || "",
+          foot: data.fields["Preferred Foot"] || "",
+          jersey: data.fields["Jersey No"] || "",
+          dob: data.fields["Date of Birth"] || "",
+        });
+      }
+    } catch {}
+    setLoading(false);
+  };
+
+  const saveProfile = async () => {
+    setSaving(true);
+    try {
+      await airtableFetch(`${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua/${player.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ fields: {
+          "Height (inches)": parseFloat(form.height) || null,
+          "Weight lbs": parseFloat(form.weight) || null,
+          "Player Position": form.position || null,
+          "Preferred Foot": form.foot || null,
+          "Jersey No": parseInt(form.jersey) || null,
+          "Date of Birth": form.dob || null,
+        }}),
+      });
+      setSaved(true); setEditing(false); loadProfile();
+    } catch {}
+    setSaving(false);
+  };
+
+  const bmi = form.height && form.weight
+    ? ((parseFloat(form.weight) / (parseFloat(form.height) * parseFloat(form.height))) * 703).toFixed(1)
+    : profile?.BMI || null;
+
+  const bmiCategory = (b) => {
+    if (!b) return null;
+    if (b < 18.5) return { label: "Underweight", color: "#64B5F6" };
+    if (b < 25) return { label: "Healthy", color: "#10B981" };
+    if (b < 30) return { label: "Overweight", color: "#F59E0B" };
+    return { label: "Obese", color: "#EF4444" };
+  };
+  const bmiInfo = bmiCategory(parseFloat(bmi));
+
+  const heightDisplay = (inches) => {
+    if (!inches) return "—";
+    const ft = Math.floor(inches / 12);
+    const inch = Math.round(inches % 12);
+    return `${ft}'${inch}" (${inches}")`;
+  };
+
+  if (loading) return <div style={{ padding: 20, color: C.textMuted, textAlign: "center" }}>Loading profile...</div>;
+
+  return (
+    <div style={{ padding: "12px 14px" }}>
+      {/* Header */}
+      <div style={{ background: player.color + "20", border: `1px solid ${player.color}44`, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <div style={{ color: player.color, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>PLAYER PROFILE</div>
+            <div style={{ color: C.text, fontSize: 22, fontWeight: 800, marginTop: 2 }}>{player.emoji} {player.name}</div>
+            {profile?.["Player Position"] && <div style={{ color: C.textMuted, fontSize: 12, marginTop: 2 }}>{profile["Player Position"]} · #{profile["Jersey No"] || "—"}</div>}
+          </div>
+          {canEdit && (
+            <button onClick={() => setEditing(!editing)}
+              style={{ background: editing ? C.darkBorder : player.color, border: "none", borderRadius: 8, padding: "6px 14px", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              {editing ? "Cancel" : "✏️ Edit"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!editing ? (
+        <>
+          {/* Stats grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+            {[
+              { label: "Height", value: heightDisplay(profile?.["Height (inches)"]) },
+              { label: "Weight", value: profile?.["Weight lbs"] ? `${profile["Weight lbs"]} lbs` : "—" },
+              { label: "Date of Birth", value: profile?.["Date of Birth"] || "—" },
+              { label: "Preferred Foot", value: profile?.["Preferred Foot"] || "—" },
+              { label: "Position", value: profile?.["Player Position"] || "—" },
+              { label: "Jersey No", value: profile?.["Jersey No"] ? `#${profile["Jersey No"]}` : "—" },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 12 }}>
+                <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>{label.toUpperCase()}</div>
+                <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* BMI Card */}
+          {bmi && (
+            <div style={{ background: C.darkCard, border: `1px solid ${bmiInfo?.color || C.darkBorder}44`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
+              <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>BMI</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ color: bmiInfo?.color || C.text, fontSize: 36, fontWeight: 800, fontFamily: "monospace" }}>{bmi}</div>
+                <div>
+                  {bmiInfo && <div style={{ background: bmiInfo.color + "25", color: bmiInfo.color, border: `1px solid ${bmiInfo.color}44`, borderRadius: 12, padding: "3px 12px", fontSize: 12, fontWeight: 700, display: "inline-block" }}>{bmiInfo.label}</div>}
+                  <div style={{ color: C.textMuted, fontSize: 11, marginTop: 4 }}>Body Mass Index · Auto-calculated</div>
+                </div>
+              </div>
+              {/* BMI scale */}
+              <div style={{ marginTop: 12 }}>
+                <div style={{ display: "flex", borderRadius: 4, overflow: "hidden", height: 6 }}>
+                  {[{ color: "#64B5F6", w: "25%" }, { color: "#10B981", w: "35%" }, { color: "#F59E0B", w: "25%" }, { color: "#EF4444", w: "15%" }].map((s, i) => (
+                    <div key={i} style={{ background: s.color, width: s.w }} />
+                  ))}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                  {["Underweight", "Healthy", "Overweight", "Obese"].map(l => (
+                    <span key={l} style={{ fontSize: 8, color: C.textDim }}>{l}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!canEdit && !profile?.["Height (inches)"] && (
+            <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, textAlign: "center", color: C.textMuted, fontSize: 12 }}>
+              Profile not yet filled in. Ask your coach to update your profile.
+            </div>
+          )}
+        </>
+      ) : (
+        /* Edit form */
+        <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 16 }}>
+          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 12, fontFamily: "monospace" }}>EDIT PROFILE</div>
+          {[
+            { label: "HEIGHT (inches)", key: "height", type: "number", placeholder: 'e.g. 68 for 5'8"' },
+            { label: "WEIGHT (lbs)", key: "weight", type: "number", placeholder: "e.g. 145" },
+            { label: "DATE OF BIRTH", key: "dob", type: "date", placeholder: "" },
+            { label: "JERSEY NUMBER", key: "jersey", type: "number", placeholder: "e.g. 10" },
+          ].map(f => (
+            <div key={f.key} style={{ marginBottom: 12 }}>
+              <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>{f.label}</div>
+              <input type={f.type} placeholder={f.placeholder} value={form[f.key]}
+                onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                style={inp({ fontSize: 13 })} />
+            </div>
+          ))}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>POSITION</div>
+            <select style={{ ...inp({ fontSize: 13 }), appearance: "none" }} value={form.position} onChange={e => setForm(p => ({ ...p, position: e.target.value }))}>
+              <option value="">Select...</option>
+              {["Forward", "Striker", "Winger", "Attacking Mid", "Midfielder", "Defensive Mid", "Defender", "Center Back", "Full Back", "Goalkeeper"].map(pos => (
+                <option key={pos} value={pos}>{pos}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>PREFERRED FOOT</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {["Right", "Left", "Both"].map(f => (
+                <button key={f} onClick={() => setForm(p => ({ ...p, foot: f }))}
+                  style={{ flex: 1, padding: "8px 4px", borderRadius: 8, border: `2px solid ${form.foot === f ? player.color : C.darkBorder}`,
+                    background: form.foot === f ? player.color + "25" : "transparent", color: form.foot === f ? player.color : C.textMuted,
+                    cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* BMI preview */}
+          {form.height && form.weight && (
+            <div style={{ background: C.blueFade, border: `1px solid ${C.blue}44`, borderRadius: 8, padding: 10, marginBottom: 12, textAlign: "center" }}>
+              <span style={{ color: C.textMuted, fontSize: 11 }}>BMI Preview: </span>
+              <span style={{ color: C.blueLight, fontSize: 15, fontWeight: 800 }}>{bmi}</span>
+              {bmiInfo && <span style={{ color: bmiInfo.color, fontSize: 11, marginLeft: 8 }}>({bmiInfo.label})</span>}
+            </div>
+          )}
+          {saved && <div style={{ color: C.success, fontSize: 12, textAlign: "center", marginBottom: 8 }}>✅ Profile saved!</div>}
+          <button onClick={saveProfile} disabled={saving}
+            style={btn(player.color, { width: "100%", padding: 12 })}>
+            {saving ? "Saving..." : "Save Profile"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -950,7 +1151,7 @@ function AssessmentForm({ player, readOnly = false }) {
 function PlayerDashboard({ user, onLogout }) {
   const player = PLAYERS_DATA.find(p => p.id === user.playerId);
   const [tab, setTab] = useState("plan");
-  const tabs = [{ id: "plan", label: "My Plan" }, { id: "log", label: "Log Session" }, { id: "assessment", label: "My Assessment" }];
+  const tabs = [{ id: "plan", label: "My Plan" }, { id: "log", label: "Log Session" }, { id: "assessment", label: "Assessment" }, { id: "profile", label: "My Profile" }];
   if (!player) return <div style={{ padding: 20, color: C.textMuted }}>No training plan found.</div>;
   return (
     <div>
@@ -974,6 +1175,7 @@ function PlayerDashboard({ user, onLogout }) {
       )}
       {tab === "log" && <SessionLogger player={player} />}
       {tab === "assessment" && <AssessmentForm player={player} readOnly={true} />}
+      {tab === "profile" && <PlayerProfile player={player} canEdit={false} />}
     </div>
   );
 }
@@ -982,7 +1184,7 @@ function PlayerDashboard({ user, onLogout }) {
 function ParentDashboard({ user, onLogout }) {
   const player = PLAYERS_DATA.find(p => p.id === user.childId);
   const [tab, setTab] = useState("overview");
-  const tabs = [{ id: "overview", label: "Overview" }, { id: "plan", label: "Training Plan" }, { id: "assessment", label: "Assessment" }];
+  const tabs = [{ id: "overview", label: "Overview" }, { id: "plan", label: "Training Plan" }, { id: "assessment", label: "Assessment" }, { id: "profile", label: "Profile" }];
   if (!player) return <div style={{ padding: 20, color: C.textMuted }}>No player data found.</div>;
   return (
     <div>
@@ -1007,6 +1209,7 @@ function ParentDashboard({ user, onLogout }) {
         </div>
       )}
       {tab === "assessment" && <AssessmentForm player={player} readOnly={true} />}
+      {tab === "profile" && <PlayerProfile player={player} canEdit={false} />}
       {tab === "plan" && (
         <div style={{ padding: 16 }}>
           <div style={{ color: C.text, fontSize: 16, fontWeight: 800, marginBottom: 16 }}>Training Plan</div>
