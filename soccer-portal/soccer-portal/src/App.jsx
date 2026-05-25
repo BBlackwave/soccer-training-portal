@@ -650,6 +650,7 @@ function CoachDashboard({ user, onLogout }) {
   const tabs = [
     { id: "players", label: "Players" },
     { id: "session", label: "Session Logger" },
+    { id: "dashboard", label: "Dashboard" },
     { id: "team", label: "Team" },
     { id: "users", label: "Manage Users" },
   ];
@@ -736,6 +737,7 @@ function CoachDashboard({ user, onLogout }) {
           )}
         </div>
       )}
+      {tab === "dashboard" && <PerformanceDashboard />}
       {tab === "team" && (
         <div style={{ padding: 16 }}>
           <div style={{ color: C.text, fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Team Overview</div>
@@ -959,6 +961,304 @@ function PlayerProfile({ player, canEdit = false }) {
   );
 }
 
+
+// ─── PERFORMANCE DASHBOARD ───────────────────────────────────────────────────
+const BENCHMARKS = {
+  14: {
+    "10yd Sprint":     { player: null, avg: 2.20, elite: 1.90, unit: "s", lowerIsBetter: true },
+    "40yd Sprint":     { player: null, avg: 5.50, elite: 5.00, unit: "s", lowerIsBetter: true },
+    "5-10-5 Shuttle":  { player: null, avg: 5.50, elite: 5.00, unit: "s", lowerIsBetter: true },
+    "Vertical Jump":   { player: null, avg: 18.0, elite: 23.0, unit: "in", lowerIsBetter: false },
+    "Broad Jump":      { player: null, avg: 66.0, elite: 78.0, unit: "in", lowerIsBetter: false },
+    "Push Ups":        { player: null, avg: 25.0, elite: 35.0, unit: "reps", lowerIsBetter: false },
+    "Plank Hold":      { player: null, avg: 52.0, elite: 75.0, unit: "s", lowerIsBetter: false },
+  },
+  11: {
+    "10yd Sprint":     { player: null, avg: 2.65, elite: 2.35, unit: "s", lowerIsBetter: true },
+    "40yd Sprint":     { player: null, avg: 6.60, elite: 6.00, unit: "s", lowerIsBetter: true },
+    "5-10-5 Shuttle":  { player: null, avg: 6.40, elite: 5.75, unit: "s", lowerIsBetter: true },
+    "Vertical Jump":   { player: null, avg: 14.0, elite: 18.0, unit: "in", lowerIsBetter: false },
+    "Broad Jump":      { player: null, avg: 54.0, elite: 66.0, unit: "in", lowerIsBetter: false },
+    "Push Ups":        { player: null, avg: 12.0, elite: 20.0, unit: "reps", lowerIsBetter: false },
+    "Plank Hold":      { player: null, avg: 37.0, elite: 60.0, unit: "s", lowerIsBetter: false },
+  },
+};
+
+const PLAYER_ASSESSMENTS = {
+  "recPaWuQLtussFtna": { age: 14, name: "Aaron", color: "#E53935", emoji: "💪", data: {
+    "10yd Sprint": 2.23, "40yd Sprint": 5.52, "5-10-5 Shuttle": 5.53,
+    "Vertical Jump": 36, "Broad Jump": 106, "Push Ups": 10, "Plank Hold": 17.03,
+  }},
+  "rectUtNasT2HwjUwe": { age: 11, name: "Noah", color: "#1E88E5", emoji: "⚽", data: {
+    "10yd Sprint": 2.64, "40yd Sprint": 6.52, "5-10-5 Shuttle": 6.43,
+    "Vertical Jump": 31, "Broad Jump": 80, "Push Ups": 20, "Plank Hold": 180,
+  }},
+  "rec88HsXp6OYXgzg3": { age: 11, name: "Alexander", color: "#43A047", emoji: "🎯", data: {
+    "10yd Sprint": 2.63, "40yd Sprint": 6.92, "5-10-5 Shuttle": 6.95,
+    "Vertical Jump": 30, "Broad Jump": 78, "Push Ups": 34, "Plank Hold": 180,
+  }},
+};
+
+function getRating(value, benchmark, lowerIsBetter) {
+  if (!value) return { label: "N/A", color: "#546E7A" };
+  if (lowerIsBetter) {
+    if (value <= benchmark.elite) return { label: "Elite", color: "#10B981" };
+    if (value <= benchmark.avg) return { label: "Good", color: "#64B5F6" };
+    if (value <= benchmark.avg * 1.1) return { label: "Average", color: "#F59E0B" };
+    return { label: "Needs Work", color: "#EF4444" };
+  } else {
+    if (value >= benchmark.elite) return { label: "Elite", color: "#10B981" };
+    if (value >= benchmark.avg) return { label: "Good", color: "#64B5F6" };
+    if (value >= benchmark.avg * 0.9) return { label: "Average", color: "#F59E0B" };
+    return { label: "Needs Work", color: "#EF4444" };
+  }
+}
+
+function getBarWidth(value, benchmarks, lowerIsBetter) {
+  const max = lowerIsBetter
+    ? Math.max(value, benchmarks.avg, benchmarks.elite) * 1.2
+    : Math.max(value, benchmarks.avg, benchmarks.elite) * 1.2;
+  const pct = lowerIsBetter
+    ? ((max - value) / max) * 100
+    : (value / max) * 100;
+  return Math.min(Math.max(pct, 5), 100);
+}
+
+function BarChart({ testName, playerValue, benchmark, playerColor, playerName }) {
+  const { avg, elite, unit, lowerIsBetter } = benchmark;
+  const rating = getRating(playerValue, benchmark, lowerIsBetter);
+  const maxVal = lowerIsBetter
+    ? Math.max(playerValue || 0, avg, elite) * 1.25
+    : Math.max(playerValue || 0, avg, elite) * 1.25;
+
+  const barPct = (val) => lowerIsBetter
+    ? Math.max(5, Math.min(100, ((maxVal - val) / maxVal) * 100 + 20))
+    : Math.max(5, Math.min(100, (val / maxVal) * 100));
+
+  const bars = [
+    { label: playerName, value: playerValue, color: playerColor, pct: barPct(playerValue || 0) },
+    { label: "Age Avg", value: avg, color: "#546E7A", pct: barPct(avg) },
+    { label: "Elite", value: elite, color: "#FFB300", pct: barPct(elite) },
+  ];
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <div style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{testName}</div>
+        <span style={{ fontSize: 10, background: rating.color + "25", color: rating.color,
+          border: `1px solid ${rating.color}44`, borderRadius: 10, padding: "2px 8px", fontWeight: 700 }}>
+          {rating.label}
+        </span>
+      </div>
+      {bars.map((bar, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+          <div style={{ width: 60, fontSize: 10, color: C.textMuted, textAlign: "right", flexShrink: 0 }}>
+            {bar.label}
+          </div>
+          <div style={{ flex: 1, background: C.darkBorder, borderRadius: 4, height: 20, position: "relative", overflow: "hidden" }}>
+            <div style={{
+              height: "100%", borderRadius: 4,
+              background: i === 0 ? bar.color : i === 1 ? "#37474F" : "#F59E0B33",
+              border: i === 2 ? `1px solid #FFB300` : "none",
+              width: `${bar.pct}%`,
+              transition: "width 0.6s ease",
+              display: "flex", alignItems: "center", paddingLeft: 6,
+            }}>
+              <span style={{ color: "#fff", fontSize: 9, fontWeight: 700, fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                {bar.value}{unit}
+              </span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RadarScore({ player, assessment }) {
+  const benchmarks = BENCHMARKS[assessment.age];
+  const tests = Object.keys(benchmarks);
+  const scores = tests.map(t => {
+    const val = assessment.data[t];
+    const b = benchmarks[t];
+    if (!val) return 0;
+    if (b.lowerIsBetter) {
+      if (val <= b.elite) return 100;
+      if (val <= b.avg) return 75;
+      if (val <= b.avg * 1.1) return 50;
+      return 25;
+    } else {
+      if (val >= b.elite) return 100;
+      if (val >= b.avg) return 75;
+      if (val >= b.avg * 0.9) return 50;
+      return 25;
+    }
+  });
+  const overall = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  const eliteCount = scores.filter(s => s === 100).length;
+  const needsWorkCount = scores.filter(s => s === 25).length;
+
+  return (
+    <div style={{ background: player.color + "15", border: `1px solid ${player.color}44`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div>
+          <div style={{ color: player.color, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>OVERALL SCORE</div>
+          <div style={{ color: C.text, fontSize: 13, marginTop: 2 }}>vs Age {assessment.age} Benchmarks</div>
+        </div>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ color: player.color, fontSize: 40, fontWeight: 800, fontFamily: "monospace", lineHeight: 1 }}>{overall}</div>
+          <div style={{ color: C.textMuted, fontSize: 10 }}>/ 100</div>
+        </div>
+      </div>
+      {/* Score bar */}
+      <div style={{ background: C.darkBorder, borderRadius: 6, height: 10, marginBottom: 12 }}>
+        <div style={{ height: 10, borderRadius: 6, width: `${overall}%`,
+          background: overall >= 75 ? "#10B981" : overall >= 50 ? "#F59E0B" : "#EF4444",
+          transition: "width 0.8s ease" }} />
+      </div>
+      {/* Badges */}
+      <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ flex: 1, background: "#10B98120", border: "1px solid #10B98144", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
+          <div style={{ color: "#10B981", fontSize: 18, fontWeight: 800 }}>{eliteCount}</div>
+          <div style={{ color: C.textMuted, fontSize: 9 }}>ELITE TESTS</div>
+        </div>
+        <div style={{ flex: 1, background: "#64B5F620", border: "1px solid #64B5F644", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
+          <div style={{ color: "#64B5F6", fontSize: 18, fontWeight: 800 }}>{scores.filter(s => s === 75).length}</div>
+          <div style={{ color: C.textMuted, fontSize: 9 }}>GOOD TESTS</div>
+        </div>
+        <div style={{ flex: 1, background: "#EF444420", border: "1px solid #EF444444", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
+          <div style={{ color: "#EF4444", fontSize: 18, fontWeight: 800 }}>{needsWorkCount}</div>
+          <div style={{ color: C.textMuted, fontSize: 9 }}>NEEDS WORK</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PerformanceDashboard({ playerId = null }) {
+  const allPlayers = Object.entries(PLAYER_ASSESSMENTS);
+  const [selectedId, setSelectedId] = useState(playerId || allPlayers[0][0]);
+  const [section, setSection] = useState("physical");
+
+  const isCoach = !playerId;
+  const assessment = PLAYER_ASSESSMENTS[selectedId];
+  const player = PLAYERS_DATA.find(p => p.id === selectedId);
+  const benchmarks = BENCHMARKS[assessment.age];
+
+  const physicalTests = ["10yd Sprint", "40yd Sprint", "5-10-5 Shuttle", "Vertical Jump", "Broad Jump", "Push Ups", "Plank Hold"];
+
+  return (
+    <div style={{ padding: "12px 14px" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ color: C.text, fontSize: 18, fontWeight: 800 }}>Performance Dashboard</div>
+        <div style={{ color: C.textMuted, fontSize: 12 }}>Baseline vs World Age Group Benchmarks</div>
+      </div>
+
+      {/* Player selector (coach only) */}
+      {isCoach && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          {allPlayers.map(([id, a]) => {
+            const p = PLAYERS_DATA.find(pl => pl.id === id);
+            return (
+              <button key={id} onClick={() => setSelectedId(id)}
+                style={{ flex: 1, padding: "10px 6px", borderRadius: 10,
+                  border: `2px solid ${selectedId === id ? p?.color || "#fff" : C.darkBorder}`,
+                  background: selectedId === id ? (p?.color || "#fff") + "20" : "transparent",
+                  cursor: "pointer" }}>
+                <div style={{ fontSize: 18 }}>{a.emoji}</div>
+                <div style={{ color: selectedId === id ? p?.color || C.text : C.textMuted,
+                  fontSize: 11, fontWeight: 700, marginTop: 4 }}>{a.name}</div>
+                <div style={{ color: C.textDim, fontSize: 9 }}>Age {a.age}</div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Overall score card */}
+      <RadarScore player={player || { color: "#2563EB" }} assessment={assessment} />
+
+      {/* Section tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
+        {[{ id: "physical", label: "Physical" }, { id: "soccer", label: "Soccer Skills" }].map(s => (
+          <button key={s.id} onClick={() => setSection(s.id)}
+            style={{ flex: 1, padding: "8px 4px", borderRadius: 10, border: "none", cursor: "pointer",
+              fontSize: 12, fontWeight: 700,
+              background: section === s.id ? (player?.color || C.blue) : C.darkBorder,
+              color: section === s.id ? "#fff" : C.textMuted }}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+        {[
+          { color: player?.color || C.blue, label: assessment.name },
+          { color: "#546E7A", label: "Age Average" },
+          { color: "#FFB300", label: "Elite Level" },
+        ].map(l => (
+          <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: l.color, flexShrink: 0 }} />
+            <span style={{ color: C.textMuted, fontSize: 10 }}>{l.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Bar charts */}
+      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 16 }}>
+        {section === "physical" ? (
+          physicalTests.map(test => (
+            <BarChart key={test} testName={test}
+              playerValue={assessment.data[test]}
+              benchmark={benchmarks[test]}
+              playerColor={player?.color || C.blue}
+              playerName={assessment.name} />
+          ))
+        ) : (
+          <div style={{ padding: 20, textAlign: "center" }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>⚽</div>
+            <div style={{ color: C.text, fontWeight: 700, marginBottom: 6 }}>Soccer Skills Assessment</div>
+            <div style={{ color: C.textMuted, fontSize: 12 }}>
+              Soccer skill benchmarks (passing accuracy, shooting, dribble speed) coming soon.
+              Complete a skills assessment to see your comparison.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Key insights */}
+      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 16, marginTop: 12 }}>
+        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>
+          KEY INSIGHTS
+        </div>
+        {physicalTests.map(test => {
+          const val = assessment.data[test];
+          const b = benchmarks[test];
+          const rating = getRating(val, b, b.lowerIsBetter);
+          if (rating.label !== "Elite" && rating.label !== "Needs Work") return null;
+          return (
+            <div key={test} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
+              padding: "8px 10px", background: rating.color + "15",
+              border: `1px solid ${rating.color}33`, borderRadius: 8 }}>
+              <span style={{ fontSize: 14 }}>{rating.label === "Elite" ? "🔥" : "⚠️"}</span>
+              <div>
+                <span style={{ color: rating.color, fontSize: 12, fontWeight: 700 }}>{test}: </span>
+                <span style={{ color: C.textMuted, fontSize: 11 }}>
+                  {rating.label === "Elite"
+                    ? `${val}${b.unit} — Elite level for age ${assessment.age}`
+                    : `${val}${b.unit} — Priority training area`}
+                </span>
+              </div>
+            </div>
+          );
+        }).filter(Boolean)}
+      </div>
+    </div>
+  );
+}
+
 // ─── ASSESSMENT FORM ──────────────────────────────────────────────────────────
 const PHYSICAL_TESTS = [
   { key: "sprint10", label: "10 Yard Sprint", unit: "seconds", field: "Sprint 10 Yard CORRECT" },
@@ -1143,7 +1443,7 @@ function AssessmentForm({ player, readOnly = false }) {
 function PlayerDashboard({ user, onLogout }) {
   const player = PLAYERS_DATA.find(p => p.id === user.playerId);
   const [tab, setTab] = useState("plan");
-  const tabs = [{ id: "plan", label: "My Plan" }, { id: "log", label: "Log Session" }, { id: "assessment", label: "Assessment" }, { id: "profile", label: "My Profile" }];
+  const tabs = [{ id: "plan", label: "My Plan" }, { id: "log", label: "Log Session" }, { id: "dashboard", label: "Dashboard" }, { id: "assessment", label: "Assessment" }, { id: "profile", label: "My Profile" }];
   if (!player) return <div style={{ padding: 20, color: C.textMuted }}>No training plan found.</div>;
   return (
     <div>
@@ -1166,7 +1466,9 @@ function PlayerDashboard({ user, onLogout }) {
         </div>
       )}
       {tab === "log" && <SessionLogger player={player} />}
+      {tab === "dashboard" && <PerformanceDashboard playerId={player.id} />}
       {tab === "assessment" && <AssessmentForm player={player} readOnly={true} />}
+      {tab === "dashboard" && <PerformanceDashboard playerId={player.id} />}
       {tab === "profile" && <PlayerProfile player={player} canEdit={false} />}
     </div>
   );
@@ -1176,7 +1478,7 @@ function PlayerDashboard({ user, onLogout }) {
 function ParentDashboard({ user, onLogout }) {
   const player = PLAYERS_DATA.find(p => p.id === user.childId);
   const [tab, setTab] = useState("overview");
-  const tabs = [{ id: "overview", label: "Overview" }, { id: "plan", label: "Training Plan" }, { id: "assessment", label: "Assessment" }, { id: "profile", label: "Profile" }];
+  const tabs = [{ id: "overview", label: "Overview" }, { id: "plan", label: "Training Plan" }, { id: "dashboard", label: "Dashboard" }, { id: "assessment", label: "Assessment" }, { id: "profile", label: "Profile" }];
   if (!player) return <div style={{ padding: 20, color: C.textMuted }}>No player data found.</div>;
   return (
     <div>
@@ -1201,6 +1503,7 @@ function ParentDashboard({ user, onLogout }) {
         </div>
       )}
       {tab === "assessment" && <AssessmentForm player={player} readOnly={true} />}
+      {tab === "dashboard" && <PerformanceDashboard playerId={player.id} />}
       {tab === "profile" && <PlayerProfile player={player} canEdit={false} />}
       {tab === "plan" && (
         <div style={{ padding: 16 }}>
