@@ -769,224 +769,189 @@ function CoachDashboard({ user, onLogout }) {
 
 // ─── PLAYER PROFILE ───────────────────────────────────────────────────────────
 function PlayerProfile({ player, canEdit = false }) {
-  const [profile, setProfile] = useState(null);
-  const [debugMsg, setDebugMsg] = useState("");
+  const [height, setHeight] = useState("");
+  const [weight, setWeight] = useState("");
+  const [dob, setDob] = useState("");
+  const [position, setPosition] = useState("");
+  const [foot, setFoot] = useState("");
+  const [jersey, setJersey] = useState("");
+  const [coachNotes, setCoachNotes] = useState("");
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({});
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("idle"); // idle | saving | saved | error
+  const [msg, setMsg] = useState("");
 
-  useEffect(() => { loadProfile(); }, []);
+  const bmi = height && weight
+    ? ((parseFloat(weight) / (parseFloat(height) * parseFloat(height))) * 703).toFixed(1)
+    : null;
 
-  const loadProfile = async () => {
-    setLoading(true);
-    setDebugMsg("Fetching profile...");
-    try {
-      const formula = encodeURIComponent(`RECORD_ID()="${player.id}"`);
-      const url = `${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua?filterByFormula=${formula}`;
-      setDebugMsg("URL: " + url);
-      const data = await airtableFetch(url);
-      setDebugMsg("Response: " + JSON.stringify(data).slice(0, 200));
-      if (data.records && data.records.length > 0) {
-        const fields = data.records[0].fields;
-        setProfile(fields);
-        setForm({
-          height: fields["Height (inches)"] || "",
-          weight: fields["Weight lbs"] || "",
-          position: fields["Player Position"] || "",
-          foot: fields["Preferred Foot"] || "",
-          jersey: fields["Jersey No"] || "",
-          dob: fields["Date of Birth"] || "",
-        });
-        setDebugMsg("");
-      } else {
-        setProfile({});
-        setDebugMsg("No records found for player ID: " + player.id);
-      }
-    } catch (e) {
-      setProfile({});
-      setDebugMsg("Error: " + e.message);
-    }
-    setLoading(false);
+  const bmiLabel = (b) => {
+    const n = parseFloat(b);
+    if (n < 18.5) return { label: "Underweight", color: "#64B5F6" };
+    if (n < 25) return { label: "Healthy", color: "#10B981" };
+    if (n < 30) return { label: "Overweight", color: "#F59E0B" };
+    return { label: "High", color: "#EF4444" };
   };
 
-  const saveProfile = async () => {
-    setSaving(true);
+  const heightFt = height ? `${Math.floor(parseFloat(height) / 12)}ft ${Math.round(parseFloat(height) % 12)}in` : "—";
+
+  const save = async () => {
+    setStatus("saving"); setMsg("");
     try {
       const fields = {};
-      if (form.height) fields["Height (inches)"] = parseFloat(form.height);
-      if (form.weight) fields["Weight lbs"] = parseFloat(form.weight);
-      if (form.position) fields["Player Position"] = form.position;
-      if (form.foot) fields["Preferred Foot"] = form.foot;
-      if (form.jersey) fields["Jersey No"] = parseInt(form.jersey);
-      if (form.dob) fields["Date of Birth"] = form.dob;
-      await airtableFetch(`${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua`, {
+      if (height) fields["Height (inches)"] = parseFloat(height);
+      if (weight) fields["Weight lbs"] = parseFloat(weight);
+      if (position) fields["Player Position"] = position;
+      if (foot) fields["Preferred Foot"] = foot;
+      if (jersey) fields["Jersey No"] = parseInt(jersey);
+      if (dob) fields["Date of Birth"] = dob;
+      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua`, {
         method: "PATCH",
         body: JSON.stringify({ records: [{ id: player.id, fields }] }),
       });
-      setSaved(true); setEditing(false); loadProfile();
+      if (res.records) { setStatus("saved"); setMsg("Profile saved!"); setEditing(false); }
+      else { setStatus("error"); setMsg("Save failed: " + JSON.stringify(res).slice(0, 100)); }
     } catch (e) {
-      console.error("Save error:", e);
+      setStatus("error"); setMsg("Error: " + e.message);
     }
-    setSaving(false);
   };
-
-  const bmi = form.height && form.weight
-    ? ((parseFloat(form.weight) / (parseFloat(form.height) * parseFloat(form.height))) * 703).toFixed(1)
-    : profile?.BMI || null;
-
-  const bmiCategory = (b) => {
-    if (!b) return null;
-    if (b < 18.5) return { label: "Underweight", color: "#64B5F6" };
-    if (b < 25) return { label: "Healthy", color: "#10B981" };
-    if (b < 30) return { label: "Overweight", color: "#F59E0B" };
-    return { label: "Obese", color: "#EF4444" };
-  };
-  const bmiInfo = bmiCategory(parseFloat(bmi));
-
-  const heightDisplay = (inches) => {
-    if (!inches) return "—";
-    const ft = Math.floor(inches / 12);
-    const inch = Math.round(inches % 12);
-    return `${ft}'${inch}" (${inches}")`;
-  };
-
-  if (loading) return (
-    <div style={{ padding: 40, color: C.textMuted, textAlign: "center" }}>
-      <div style={{ fontSize: 24, marginBottom: 8 }}>⏳</div>
-      <div>Loading profile...</div>
-    </div>
-  );
-  if (profile === null) return (
-    <div style={{ padding: 40, color: C.textMuted, textAlign: "center" }}>
-      <div style={{ fontSize: 24, marginBottom: 8 }}>❌</div>
-      <div>Could not load profile. Check your connection.</div>
-    </div>
-  );
 
   return (
     <div style={{ padding: "12px 14px" }}>
       {/* Header */}
       <div style={{ background: player.color + "20", border: `1px solid ${player.color}44`, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ color: player.color, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>PLAYER PROFILE</div>
-            <div style={{ color: C.text, fontSize: 22, fontWeight: 800, marginTop: 2 }}>{player.emoji} {player.name}</div>
-            {profile?.["Player Position"] && <div style={{ color: C.textMuted, fontSize: 12, marginTop: 2 }}>{profile["Player Position"]} · #{profile["Jersey No"] || "—"}</div>}
+            <div style={{ color: C.text, fontSize: 20, fontWeight: 800, marginTop: 2 }}>{player.emoji} {player.name}</div>
           </div>
-          {canEdit && (
-            <button onClick={() => setEditing(!editing)}
-              style={{ background: editing ? C.darkBorder : player.color, border: "none", borderRadius: 8, padding: "6px 14px", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-              {editing ? "Cancel" : "Edit"}
-            </button>
+          {canEdit && !editing && (
+            <button onClick={() => setEditing(true)}
+              style={btn(player.color, { fontSize: 11, padding: "6px 14px" })}>Edit Profile</button>
+          )}
+          {canEdit && editing && (
+            <button onClick={() => setEditing(false)}
+              style={btn(C.darkBorder, { fontSize: 11, padding: "6px 14px" })}>Cancel</button>
           )}
         </div>
       </div>
 
+      {/* Status message */}
+      {msg !== "" && (
+        <div style={{ background: status === "error" ? C.danger + "20" : C.success + "20",
+          border: `1px solid ${status === "error" ? C.danger : C.success}`,
+          borderRadius: 8, padding: 10, marginBottom: 12,
+          color: status === "error" ? C.danger : C.success, fontSize: 12 }}>
+          {msg}
+        </div>
+      )}
+
       {!editing ? (
-        <>
-          {/* Stats grid */}
+        <div>
+          {/* Stats */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
             {[
-              { label: "Height", value: heightDisplay(profile?.["Height (inches)"]) },
-              { label: "Weight", value: profile?.["Weight lbs"] ? `${profile["Weight lbs"]} lbs` : "—" },
-              { label: "Date of Birth", value: profile?.["Date of Birth"] || "—" },
-              { label: "Preferred Foot", value: profile?.["Preferred Foot"] || "—" },
-              { label: "Position", value: profile?.["Player Position"] || "—" },
-              { label: "Jersey No", value: profile?.["Jersey No"] ? `#${profile["Jersey No"]}` : "—" },
+              { label: "Height", value: height ? heightFt : "Not set" },
+              { label: "Weight", value: weight ? `${weight} lbs` : "Not set" },
+              { label: "Date of Birth", value: dob || "Not set" },
+              { label: "Preferred Foot", value: foot || "Not set" },
+              { label: "Position", value: position || "Not set" },
+              { label: "Jersey No", value: jersey ? `#${jersey}` : "Not set" },
             ].map(({ label, value }) => (
               <div key={label} style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 12 }}>
                 <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>{label.toUpperCase()}</div>
-                <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>{value}</div>
+                <div style={{ color: value === "Not set" ? C.textDim : C.text, fontSize: 13, fontWeight: 700 }}>{value}</div>
               </div>
             ))}
           </div>
 
-          {/* BMI Card */}
-          {bmi && (
-            <div style={{ background: C.darkCard, border: `1px solid ${bmiInfo?.color || C.darkBorder}44`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
-              <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>BMI</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ color: bmiInfo?.color || C.text, fontSize: 36, fontWeight: 800, fontFamily: "monospace" }}>{bmi}</div>
+          {/* BMI */}
+          {bmi ? (
+            <div style={{ background: C.darkCard, border: `1px solid ${bmiLabel(bmi).color}44`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
+              <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>BODY MASS INDEX (BMI)</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div style={{ color: bmiLabel(bmi).color, fontSize: 40, fontWeight: 800, fontFamily: "monospace" }}>{bmi}</div>
                 <div>
-                  {bmiInfo && <div style={{ background: bmiInfo.color + "25", color: bmiInfo.color, border: `1px solid ${bmiInfo.color}44`, borderRadius: 12, padding: "3px 12px", fontSize: 12, fontWeight: 700, display: "inline-block" }}>{bmiInfo.label}</div>}
-                  <div style={{ color: C.textMuted, fontSize: 11, marginTop: 4 }}>Body Mass Index · Auto-calculated</div>
+                  <div style={{ background: bmiLabel(bmi).color + "25", color: bmiLabel(bmi).color,
+                    border: `1px solid ${bmiLabel(bmi).color}44`, borderRadius: 12,
+                    padding: "4px 14px", fontSize: 13, fontWeight: 700, display: "inline-block" }}>
+                    {bmiLabel(bmi).label}
+                  </div>
+                  <div style={{ color: C.textMuted, fontSize: 11, marginTop: 6 }}>Auto-calculated from height & weight</div>
                 </div>
               </div>
-              {/* BMI scale */}
-              <div style={{ marginTop: 12 }}>
-                <div style={{ display: "flex", borderRadius: 4, overflow: "hidden", height: 6 }}>
-                  {[{ color: "#64B5F6", w: "25%" }, { color: "#10B981", w: "35%" }, { color: "#F59E0B", w: "25%" }, { color: "#EF4444", w: "15%" }].map((s, i) => (
-                    <div key={i} style={{ background: s.color, width: s.w }} />
-                  ))}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-                  {["Underweight", "Healthy", "Overweight", "Obese"].map(l => (
-                    <span key={l} style={{ fontSize: 8, color: C.textDim }}>{l}</span>
-                  ))}
-                </div>
+              <div style={{ marginTop: 12, background: C.darkBorder, borderRadius: 4, height: 6, display: "flex", overflow: "hidden" }}>
+                {[{ c: "#64B5F6", w: "25%" }, { c: "#10B981", w: "35%" }, { c: "#F59E0B", w: "25%" }, { c: "#EF4444", w: "15%" }].map((s, i) => (
+                  <div key={i} style={{ background: s.c, width: s.w }} />
+                ))}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                {["Under", "Healthy", "Over", "High"].map(l => (
+                  <span key={l} style={{ fontSize: 9, color: C.textDim }}>{l}</span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, textAlign: "center" }}>
+              <div style={{ color: C.textMuted, fontSize: 12 }}>
+                {canEdit ? "Enter height and weight above to calculate BMI." : "BMI not yet available. Ask your coach to update your profile."}
               </div>
             </div>
           )}
-
-          {!canEdit && !profile?.["Height (inches)"] && (
-            <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, textAlign: "center", color: C.textMuted, fontSize: 12 }}>
-              Profile not yet filled in. Ask your coach to update your profile.
-            </div>
-          )}
-        </>
+        </div>
       ) : (
         /* Edit form */
         <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 16 }}>
-          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 12, fontFamily: "monospace" }}>EDIT PROFILE</div>
+          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 14, fontFamily: "monospace" }}>EDIT PROFILE</div>
           {[
-            { label: "HEIGHT (inches)", key: "height", type: "number", placeholder: "e.g. 68 for 5ft 8in" },
-            { label: "WEIGHT (lbs)", key: "weight", type: "number", placeholder: "e.g. 145" },
-            { label: "DATE OF BIRTH", key: "dob", type: "date", placeholder: "" },
-            { label: "JERSEY NUMBER", key: "jersey", type: "number", placeholder: "e.g. 10" },
+            { label: "HEIGHT (inches, e.g. 68)", key: "height", val: height, set: setHeight, type: "number" },
+            { label: "WEIGHT (lbs, e.g. 145)", key: "weight", val: weight, set: setWeight, type: "number" },
+            { label: "DATE OF BIRTH", key: "dob", val: dob, set: setDob, type: "date" },
+            { label: "JERSEY NUMBER", key: "jersey", val: jersey, set: setJersey, type: "number" },
           ].map(f => (
             <div key={f.key} style={{ marginBottom: 12 }}>
-              <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>{f.label}</div>
-              <input type={f.type} placeholder={f.placeholder} value={form[f.key]}
-                onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                style={inp({ fontSize: 13 })} />
+              <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 5, fontFamily: "monospace" }}>{f.label}</div>
+              <input type={f.type} value={f.val} onChange={e => f.set(e.target.value)} style={inp({ fontSize: 13 })} />
             </div>
           ))}
+
           <div style={{ marginBottom: 12 }}>
-            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>POSITION</div>
-            <select style={{ ...inp({ fontSize: 13 }), appearance: "none" }} value={form.position} onChange={e => setForm(p => ({ ...p, position: e.target.value }))}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 5, fontFamily: "monospace" }}>POSITION</div>
+            <select value={position} onChange={e => setPosition(e.target.value)} style={{ ...inp({ fontSize: 13 }), appearance: "none" }}>
               <option value="">Select...</option>
-              {["Forward", "Striker", "Winger", "Attacking Mid", "Midfielder", "Defensive Mid", "Defender", "Center Back", "Full Back", "Goalkeeper"].map(pos => (
-                <option key={pos} value={pos}>{pos}</option>
+              {["Forward", "Striker", "Winger", "Attacking Mid", "Midfielder", "Defensive Mid", "Defender", "Center Back", "Full Back", "Goalkeeper"].map(p => (
+                <option key={p} value={p}>{p}</option>
               ))}
             </select>
           </div>
+
           <div style={{ marginBottom: 16 }}>
             <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>PREFERRED FOOT</div>
             <div style={{ display: "flex", gap: 8 }}>
               {["Right", "Left", "Both"].map(f => (
-                <button key={f} onClick={() => setForm(p => ({ ...p, foot: f }))}
-                  style={{ flex: 1, padding: "8px 4px", borderRadius: 8, border: `2px solid ${form.foot === f ? player.color : C.darkBorder}`,
-                    background: form.foot === f ? player.color + "25" : "transparent", color: form.foot === f ? player.color : C.textMuted,
+                <button key={f} onClick={() => setFoot(f)}
+                  style={{ flex: 1, padding: "8px 4px", borderRadius: 8,
+                    border: `2px solid ${foot === f ? player.color : C.darkBorder}`,
+                    background: foot === f ? player.color + "25" : "transparent",
+                    color: foot === f ? player.color : C.textMuted,
                     cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
                   {f}
                 </button>
               ))}
             </div>
           </div>
-          {/* BMI preview */}
-          {form.height && form.weight && (
+
+          {/* Live BMI preview */}
+          {height && weight && (
             <div style={{ background: C.blueFade, border: `1px solid ${C.blue}44`, borderRadius: 8, padding: 10, marginBottom: 12, textAlign: "center" }}>
               <span style={{ color: C.textMuted, fontSize: 11 }}>BMI Preview: </span>
-              <span style={{ color: C.blueLight, fontSize: 15, fontWeight: 800 }}>{bmi}</span>
-              {bmiInfo && <span style={{ color: bmiInfo.color, fontSize: 11, marginLeft: 8 }}>({bmiInfo.label})</span>}
+              <span style={{ color: bmiLabel(bmi).color, fontSize: 16, fontWeight: 800 }}>{bmi}</span>
+              <span style={{ color: bmiLabel(bmi).color, fontSize: 11, marginLeft: 8 }}>({bmiLabel(bmi).label})</span>
             </div>
           )}
-          {saved && <div style={{ color: C.success, fontSize: 12, textAlign: "center", marginBottom: 8 }}>✅ Profile saved!</div>}
-          <button onClick={saveProfile} disabled={saving}
-            style={btn(player.color, { width: "100%", padding: 12 })}>
-            {saving ? "Saving..." : "Save Profile"}
+
+          <button onClick={save} disabled={status === "saving"}
+            style={btn(player.color, { width: "100%", padding: 13, fontSize: 14 })}>
+            {status === "saving" ? "Saving..." : "Save Profile"}
           </button>
         </div>
       )}
