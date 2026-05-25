@@ -770,6 +770,7 @@ function CoachDashboard({ user, onLogout }) {
 // ─── PLAYER PROFILE ───────────────────────────────────────────────────────────
 function PlayerProfile({ player, canEdit = false }) {
   const [profile, setProfile] = useState(null);
+  const [debugMsg, setDebugMsg] = useState("");
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
@@ -780,9 +781,13 @@ function PlayerProfile({ player, canEdit = false }) {
 
   const loadProfile = async () => {
     setLoading(true);
+    setDebugMsg("Fetching profile...");
     try {
       const formula = encodeURIComponent(`RECORD_ID()="${player.id}"`);
-      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua?filterByFormula=${formula}`);
+      const url = `${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua?filterByFormula=${formula}`;
+      setDebugMsg("URL: " + url);
+      const data = await airtableFetch(url);
+      setDebugMsg("Response: " + JSON.stringify(data).slice(0, 200));
       if (data.records && data.records.length > 0) {
         const fields = data.records[0].fields;
         setProfile(fields);
@@ -794,12 +799,14 @@ function PlayerProfile({ player, canEdit = false }) {
           jersey: fields["Jersey No"] || "",
           dob: fields["Date of Birth"] || "",
         });
+        setDebugMsg("");
       } else {
         setProfile({});
+        setDebugMsg("No records found for player ID: " + player.id);
       }
     } catch (e) {
-      console.error("Profile load error:", e);
       setProfile({});
+      setDebugMsg("Error: " + e.message);
     }
     setLoading(false);
   };
