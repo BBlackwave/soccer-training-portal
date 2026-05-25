@@ -651,6 +651,7 @@ function CoachDashboard({ user, onLogout }) {
     { id: "players", label: "Players" },
     { id: "session", label: "Session Logger" },
     { id: "dashboard", label: "Dashboard" },
+    { id: "plans", label: "Plans" },
     { id: "team", label: "Team" },
     { id: "users", label: "Manage Users" },
   ];
@@ -738,6 +739,7 @@ function CoachDashboard({ user, onLogout }) {
         </div>
       )}
       {tab === "dashboard" && <PerformanceDashboard />}
+      {tab === "plans" && <TrainingPlans />}
       {tab === "team" && (
         <div style={{ padding: 16 }}>
           <div style={{ color: C.text, fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Team Overview</div>
@@ -961,6 +963,195 @@ function PlayerProfile({ player, canEdit = false }) {
   );
 }
 
+
+
+// ─── TRAINING PLANS (Live from Airtable) ──────────────────────────────────────
+const PLANS_TABLE_ID = "tblBeT6yn4hbgtKd9";
+
+function TrainingPlans({ filterPlayerName = null }) {
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => { loadPlans(); }, []);
+
+  const loadPlans = async () => {
+    setLoading(true);
+    try {
+      const data = await airtableFetch(
+        `${AIRTABLE_BASE_ID}/${PLANS_TABLE_ID}?fields[]=fldCipF6KyeI6FpXP&fields[]=fldfoeFXO2Q9fCFRx&fields[]=fldMQu4z9KVRhyQLW&fields[]=fldQYvsidernGLcCk&fields[]=fldjAOLdacBrEYOO9&fields[]=fldlnJeSzSOcD77QC&fields[]=fldnKJD4y3qeqms5s&fields[]=fldLUF3SrNGA6OI6t`
+      );
+      if (data.records) setPlans(data.records);
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const diffColor = { "Advanced": "#EF4444", "Intermediate": "#F59E0B", "Beginner": "#10B981" };
+
+  const filtered = plans.filter(p => {
+    const title = p.cellValuesByFieldId["fldCipF6KyeI6FpXP"] || "";
+    const matchesSearch = title.toLowerCase().includes(search.toLowerCase());
+    const matchesPlayer = filterPlayerName
+      ? title.toLowerCase().includes(filterPlayerName.toLowerCase())
+      : true;
+    return matchesSearch && matchesPlayer;
+  });
+
+  if (selected) {
+    const f = selected.cellValuesByFieldId;
+    const title = f["fldCipF6KyeI6FpXP"] || "Training Plan";
+    const desc = f["fldfoeFXO2Q9fCFRx"] || "";
+    const drills = f["fldMQu4z9KVRhyQLW"] || "";
+    const duration = f["fldQYvsidernGLcCk"];
+    const diff = f["fldjAOLdacBrEYOO9"]?.name || "";
+    const equipment = f["fldlnJeSzSOcD77QC"] || "";
+    const coachNotes = f["fldnKJD4y3qeqms5s"] || "";
+    const focus = f["fldLUF3SrNGA6OI6t"]?.name || "";
+    const color = diffColor[diff] || C.blue;
+
+    return (
+      <div style={{ padding: "12px 14px" }}>
+        {/* Back button */}
+        <button onClick={() => setSelected(null)}
+          style={{ background: C.darkBorder, border: "none", borderRadius: 8, padding: "6px 14px",
+            color: C.text, fontSize: 12, cursor: "pointer", marginBottom: 14 }}>
+          Back to Plans
+        </button>
+
+        {/* Plan header */}
+        <div style={{ background: color + "15", border: `1px solid ${color}44`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: color, fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>
+                {focus.toUpperCase()} PLAN
+              </div>
+              <div style={{ color: C.text, fontSize: 16, fontWeight: 800, lineHeight: 1.3 }}>{title}</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {duration && (
+              <span style={{ fontSize: 11, background: C.darkBorder, color: C.textMuted, borderRadius: 8, padding: "3px 10px" }}>
+                {duration} min
+              </span>
+            )}
+            {diff && (
+              <span style={{ fontSize: 11, background: color + "25", color, border: `1px solid ${color}44`, borderRadius: 8, padding: "3px 10px", fontWeight: 700 }}>
+                {diff}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Description */}
+        {desc && (
+          <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>OVERVIEW</div>
+            <div style={{ color: C.text, fontSize: 13, lineHeight: 1.6 }}>{desc}</div>
+          </div>
+        )}
+
+        {/* Full drills */}
+        {drills && (
+          <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>FULL PLAN</div>
+            <pre style={{ color: C.text, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap", fontFamily: "'DM Mono', monospace", margin: 0 }}>
+              {drills}
+            </pre>
+          </div>
+        )}
+
+        {/* Equipment */}
+        {equipment && (
+          <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>EQUIPMENT NEEDED</div>
+            <div style={{ color: C.text, fontSize: 12, lineHeight: 1.6 }}>{equipment}</div>
+          </div>
+        )}
+
+        {/* Coach notes */}
+        {coachNotes && (
+          <div style={{ background: "#FFB30015", border: "1px solid #FFB30044", borderRadius: 10, padding: 14, marginBottom: 12 }}>
+            <div style={{ color: "#FFB300", fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>COACH NOTES</div>
+            <div style={{ color: C.text, fontSize: 12, lineHeight: 1.6 }}>{coachNotes}</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "12px 14px" }}>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ color: C.text, fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Training Plans</div>
+        <div style={{ color: C.textMuted, fontSize: 12 }}>
+          {loading ? "Loading from Airtable..." : `${filtered.length} plan${filtered.length !== 1 ? "s" : ""} available`}
+        </div>
+      </div>
+
+      {/* Search */}
+      {!filterPlayerName && (
+        <input type="text" placeholder="Search plans..." value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ ...inp({ fontSize: 13, marginBottom: 14 }) }} />
+      )}
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
+          <div style={{ fontSize: 24, marginBottom: 8 }}>⏳</div>
+          <div>Loading plans from Airtable...</div>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
+          <div style={{ fontSize: 24, marginBottom: 8 }}>📋</div>
+          <div>No plans found.</div>
+        </div>
+      ) : (
+        filtered.map(plan => {
+          const f = plan.cellValuesByFieldId;
+          const title = f["fldCipF6KyeI6FpXP"] || "Untitled Plan";
+          const desc = f["fldfoeFXO2Q9fCFRx"] || "";
+          const duration = f["fldQYvsidernGLcCk"];
+          const diff = f["fldjAOLdacBrEYOO9"]?.name || "";
+          const focus = f["fldLUF3SrNGA6OI6t"]?.name || "";
+          const color = diffColor[diff] || C.blue;
+
+          return (
+            <div key={plan.id} onClick={() => setSelected(plan)}
+              style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12,
+                padding: 16, marginBottom: 10, cursor: "pointer",
+                transition: "border-color 0.2s" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                <div style={{ flex: 1, paddingRight: 10 }}>
+                  <div style={{ color: C.text, fontSize: 14, fontWeight: 700, lineHeight: 1.3 }}>{title}</div>
+                  {focus && <div style={{ color: color, fontSize: 10, fontWeight: 700, marginTop: 3, letterSpacing: 0.5 }}>{focus.toUpperCase()}</div>}
+                </div>
+                <span style={{ color: "#AAA", fontSize: 16, flexShrink: 0 }}>›</span>
+              </div>
+              {desc && (
+                <div style={{ color: C.textMuted, fontSize: 11, lineHeight: 1.5, marginBottom: 8 }}>
+                  {desc.slice(0, 100)}{desc.length > 100 ? "..." : ""}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 6 }}>
+                {duration && (
+                  <span style={{ fontSize: 10, background: C.darkBorder, color: C.textMuted, borderRadius: 6, padding: "2px 8px" }}>
+                    {duration} min
+                  </span>
+                )}
+                {diff && (
+                  <span style={{ fontSize: 10, background: color + "25", color, border: `1px solid ${color}44`, borderRadius: 6, padding: "2px 8px", fontWeight: 700 }}>
+                    {diff}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
 
 // ─── PERFORMANCE DASHBOARD ───────────────────────────────────────────────────
 const BENCHMARKS = {
@@ -1443,7 +1634,7 @@ function AssessmentForm({ player, readOnly = false }) {
 function PlayerDashboard({ user, onLogout }) {
   const player = PLAYERS_DATA.find(p => p.id === user.playerId);
   const [tab, setTab] = useState("plan");
-  const tabs = [{ id: "plan", label: "My Plan" }, { id: "log", label: "Log Session" }, { id: "dashboard", label: "Dashboard" }, { id: "assessment", label: "Assessment" }, { id: "profile", label: "My Profile" }];
+  const tabs = [{ id: "plan", label: "My Plan" }, { id: "log", label: "Log Session" }, { id: "dashboard", label: "Dashboard" }, { id: "training", label: "Training Plans" }, { id: "assessment", label: "Assessment" }, { id: "profile", label: "My Profile" }];
   if (!player) return <div style={{ padding: 20, color: C.textMuted }}>No training plan found.</div>;
   return (
     <div>
@@ -1467,6 +1658,7 @@ function PlayerDashboard({ user, onLogout }) {
       )}
       {tab === "log" && <SessionLogger player={player} />}
       {tab === "dashboard" && <PerformanceDashboard playerId={player.id} />}
+      {tab === "training" && <TrainingPlans filterPlayerName={player.name} />}
       {tab === "assessment" && <AssessmentForm player={player} readOnly={true} />}
       {tab === "dashboard" && <PerformanceDashboard playerId={player.id} />}
       {tab === "profile" && <PlayerProfile player={player} canEdit={false} />}
