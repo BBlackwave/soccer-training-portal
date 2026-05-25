@@ -979,9 +979,7 @@ function TrainingPlans({ filterPlayerName = null }) {
   const loadPlans = async () => {
     setLoading(true);
     try {
-      const data = await airtableFetch(
-        `${AIRTABLE_BASE_ID}/${PLANS_TABLE_ID}?fields[]=fldCipF6KyeI6FpXP&fields[]=fldfoeFXO2Q9fCFRx&fields[]=fldMQu4z9KVRhyQLW&fields[]=fldQYvsidernGLcCk&fields[]=fldjAOLdacBrEYOO9&fields[]=fldlnJeSzSOcD77QC&fields[]=fldnKJD4y3qeqms5s&fields[]=fldLUF3SrNGA6OI6t`
-      );
+      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${PLANS_TABLE_ID}`);
       if (data.records) setPlans(data.records);
     } catch (e) { console.error(e); }
     setLoading(false);
@@ -990,7 +988,7 @@ function TrainingPlans({ filterPlayerName = null }) {
   const diffColor = { "Advanced": "#EF4444", "Intermediate": "#F59E0B", "Beginner": "#10B981" };
 
   const filtered = plans.filter(p => {
-    const title = p.cellValuesByFieldId["fldCipF6KyeI6FpXP"] || "";
+    const title = p.fields["Plan Name"] || Object.values(p.fields || {})[0] || "";
     const matchesSearch = title.toLowerCase().includes(search.toLowerCase());
     const matchesPlayer = filterPlayerName
       ? title.toLowerCase().includes(filterPlayerName.toLowerCase())
@@ -999,15 +997,16 @@ function TrainingPlans({ filterPlayerName = null }) {
   });
 
   if (selected) {
-    const f = selected.cellValuesByFieldId;
-    const title = f["fldCipF6KyeI6FpXP"] || "Training Plan";
-    const desc = f["fldfoeFXO2Q9fCFRx"] || "";
-    const drills = f["fldMQu4z9KVRhyQLW"] || "";
-    const duration = f["fldQYvsidernGLcCk"];
-    const diff = f["fldjAOLdacBrEYOO9"]?.name || "";
-    const equipment = f["fldlnJeSzSOcD77QC"] || "";
-    const coachNotes = f["fldnKJD4y3qeqms5s"] || "";
-    const focus = f["fldLUF3SrNGA6OI6t"]?.name || "";
+    const f = selected.fields;
+    // Try multiple possible field name formats
+    const title = f["Plan Name"] || Object.values(f)[0] || "Training Plan";
+    const desc = f["Description"] || "";
+    const drills = f["Drills & Structure"] || "";
+    const duration = f["Duration (min)"] || f["Duration"];
+    const diff = f["Difficulty"]?.name || f["Difficulty"] || "";
+    const equipment = f["Equipment"] || "";
+    const coachNotes = f["Coach Notes"] || "";
+    const focus = f["Technical Focus"]?.name || f["Technical Focus"] || "";
     const color = diffColor[diff] || C.blue;
 
     return (
@@ -1108,12 +1107,12 @@ function TrainingPlans({ filterPlayerName = null }) {
         </div>
       ) : (
         filtered.map(plan => {
-          const f = plan.cellValuesByFieldId;
-          const title = f["fldCipF6KyeI6FpXP"] || "Untitled Plan";
-          const desc = f["fldfoeFXO2Q9fCFRx"] || "";
-          const duration = f["fldQYvsidernGLcCk"];
-          const diff = f["fldjAOLdacBrEYOO9"]?.name || "";
-          const focus = f["fldLUF3SrNGA6OI6t"]?.name || "";
+          const f = plan.fields;
+          const title = f["Plan Name"] || Object.values(f)[0] || "Untitled Plan";
+          const desc = f["Description"] || "";
+          const duration = f["Duration (min)"] || f["Duration"];
+          const diff = f["Difficulty"]?.name || f["Difficulty"] || "";
+          const focus = f["Technical Focus"]?.name || f["Technical Focus"] || "";
           const color = diffColor[diff] || C.blue;
 
           return (
