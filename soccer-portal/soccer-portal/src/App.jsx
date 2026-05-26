@@ -652,6 +652,7 @@ function CoachDashboard({ user, onLogout }) {
     { id: "session", label: "Session Logger" },
     { id: "dashboard", label: "Dashboard" },
     { id: "plans", label: "Plans" },
+    { id: "pmip", label: "PMIP" },
     { id: "team", label: "Team" },
     { id: "users", label: "Manage Users" },
   ];
@@ -740,6 +741,7 @@ function CoachDashboard({ user, onLogout }) {
       )}
       {tab === "dashboard" && <PerformanceDashboard />}
       {tab === "plans" && <TrainingPlans />}
+      {tab === "pmip" && <PMIPView isCoach={true} />}
       {tab === "team" && (
         <div style={{ padding: 16 }}>
           <div style={{ color: C.text, fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Team Overview</div>
@@ -964,6 +966,351 @@ function PlayerProfile({ player, canEdit = false }) {
 }
 
 
+
+
+// ─── PMIP (Performance Metrics Improvement Plan) ─────────────────────────────
+const PMIP_TABLE_ID = "tblYjw7DMnY2jaND3";
+const EXERCISE_LIBRARY_TABLE_ID = "tbltTfCQ7l6J1elRj";
+
+const FOCUS_COLORS = {
+  "Strength": "#EF4444", "Speed": "#1E88E5", "Quickness": "#10B981",
+  "Core": "#8E24AA", "Combined": "#F59E0B",
+};
+
+function PMIPView({ playerName = null, isCoach = false }) {
+  const [sessions, setSessions] = useState([]);
+  const [library, setLibrary] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [activeTab, setActiveTab] = useState("sessions");
+  const [showAddExercise, setShowAddExercise] = useState(false);
+  const [newExercise, setNewExercise] = useState({
+    name: "", category: "Strength", description: "", sets: "",
+    repsOrDuration: "", rest: "", equipment: "", cue: "", targetMetric: "General Fitness",
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [sessRes, libRes] = await Promise.all([
+        airtableFetch(`${AIRTABLE_BASE_ID}/${PMIP_TABLE_ID}`),
+        airtableFetch(`${AIRTABLE_BASE_ID}/${EXERCISE_LIBRARY_TABLE_ID}`),
+      ]);
+      if (sessRes.records) {
+        const filtered = playerName
+          ? sessRes.records.filter(r => (r.fields["Player Name"] || "").toLowerCase() === playerName.toLowerCase())
+          : sessRes.records;
+        setSessions(filtered);
+      }
+      if (libRes.records) setLibrary(libRes.records);
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const saveExercise = async () => {
+    if (!newExercise.name) { setSaveMsg("Exercise name required."); return; }
+    setSaving(true); setSaveMsg("");
+    try {
+      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${EXERCISE_LIBRARY_TABLE_ID}`, {
+        method: "POST",
+        body: JSON.stringify({ records: [{ fields: {
+          "Exercise Name": newExercise.name,
+          "Category": newExercise.category,
+          "Description": newExercise.description,
+          "Sets": newExercise.sets ? parseInt(newExercise.sets) : null,
+          "Reps or Duration": newExercise.repsOrDuration,
+          "Rest (seconds)": newExercise.rest ? parseInt(newExercise.rest) : null,
+          "Equipment Needed": newExercise.equipment,
+          "Coaching Cue": newExercise.cue,
+          "Target Metric": newExercise.targetMetric,
+          "Added By": "Coach",
+          "Home Equipment Only": true,
+        }}]}),
+      });
+      if (res.records) {
+        setSaveMsg("Exercise saved to library!");
+        setNewExercise({ name: "", category: "Strength", description: "", sets: "",
+          repsOrDuration: "", rest: "", equipment: "", cue: "", targetMetric: "General Fitness" });
+        setShowAddExercise(false);
+        loadData();
+      }
+    } catch { setSaveMsg("Save failed. Try again."); }
+    setSaving(false);
+  };
+
+  const dayOrder = { "Tuesday": 0, "Thursday": 1 };
+  const sortedSessions = [...sessions].sort((a, b) =>
+    (dayOrder[a.fields["Day"]] || 0) - (dayOrder[b.fields["Day"]] || 0)
+  );
+
+  if (selected) {
+    const f = selected.fields;
+    const focus = f["Focus Area"] || "";
+    const color = FOCUS_COLORS[focus] || C.blue;
+    return (
+      <div style={{ padding: "12px 14px" }}>
+        <button onClick={() => setSelected(null)}
+          style={{ background: C.darkBorder, border: "none", borderRadius: 8, padding: "6px 14px",
+            color: C.text, fontSize: 12, cursor: "pointer", marginBottom: 14 }}>
+          Back
+        </button>
+        <div style={{ background: color + "15", border: `1px solid ${color}44`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+          <div style={{ color: color, fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>
+            {f["Day"]?.toUpperCase()} - PMIP - {f["Phase"]?.toUpperCase()}
+          </div>
+          <div style={{ color: C.text, fontSize: 16, fontWeight: 800 }}>{f["Session Name"]}</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            {focus && <span style={{ fontSize: 10, background: color + "25", color, border: `1px solid ${color}44`, borderRadius: 6, padding: "2px 8px", fontWeight: 700 }}>{focus}</span>}
+            {f["Duration (min)"] && <span style={{ fontSize: 10, background: C.darkBorder, color: C.textMuted, borderRadius: 6, padding: "2px 8px" }}>{f["Duration (min)"]} min</span>}
+            {f["Status"] && <span style={{ fontSize: 10, background: C.success + "25", color: C.success, borderRadius: 6, padding: "2px 8px", fontWeight: 700 }}>{f["Status"]}</span>}
+          </div>
+        </div>
+
+        {/* Target Metrics */}
+        {f["Target Metrics"] && (
+          <div style={{ background: "#FFB30015", border: "1px solid #FFB30044", borderRadius: 10, padding: 14, marginBottom: 12 }}>
+            <div style={{ color: "#FFB300", fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>TARGET METRICS</div>
+            <pre style={{ color: C.text, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap", margin: 0, fontFamily: "'DM Mono', monospace" }}>{f["Target Metrics"]}</pre>
+          </div>
+        )}
+
+        {/* Warm Up */}
+        {f["Warm Up"] && (
+          <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ color: "#FFB300", fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>WARM UP</div>
+            <pre style={{ color: C.text, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap", margin: 0, fontFamily: "'DM Mono', monospace" }}>{f["Warm Up"]}</pre>
+          </div>
+        )}
+
+        {/* Main Block */}
+        {f["Main Block"] && (
+          <div style={{ background: C.darkCard, border: `1px solid ${color}44`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ color, fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>MAIN BLOCK</div>
+            <pre style={{ color: C.text, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap", margin: 0, fontFamily: "'DM Mono', monospace" }}>{f["Main Block"]}</pre>
+          </div>
+        )}
+
+        {/* Finishers */}
+        {f["Finishers"] && (
+          <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ color: "#EF4444", fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>FINISHERS</div>
+            <pre style={{ color: C.text, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap", margin: 0, fontFamily: "'DM Mono', monospace" }}>{f["Finishers"]}</pre>
+          </div>
+        )}
+
+        {/* Cool Down */}
+        {f["Cool Down"] && (
+          <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ color: "#64B5F6", fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>COOL DOWN</div>
+            <pre style={{ color: C.text, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap", margin: 0, fontFamily: "'DM Mono', monospace" }}>{f["Cool Down"]}</pre>
+          </div>
+        )}
+
+        {/* Equipment */}
+        {f["Equipment"] && (
+          <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>EQUIPMENT</div>
+            <div style={{ color: C.text, fontSize: 12 }}>{f["Equipment"]}</div>
+          </div>
+        )}
+
+        {/* Coach Notes */}
+        {f["Coach Notes"] && (
+          <div style={{ background: "#10B98115", border: "1px solid #10B98144", borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ color: "#10B981", fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>COACH NOTES</div>
+            <div style={{ color: C.text, fontSize: 12, lineHeight: 1.6 }}>{f["Coach Notes"]}</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "12px 14px" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ color: C.text, fontSize: 18, fontWeight: 800 }}>Performance Metrics</div>
+        <div style={{ color: C.textMuted, fontSize: 12 }}>Improvement Plan — Tuesday & Thursday</div>
+      </div>
+
+      {/* Tab switcher */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
+        {[
+          { id: "sessions", label: "Sessions" },
+          { id: "library", label: "Exercise Library" },
+          ...(isCoach ? [{ id: "add", label: "+ Add Exercise" }] : []),
+        ].map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            style={{ padding: "7px 14px", borderRadius: 10, border: "none", cursor: "pointer",
+              fontSize: 11, fontWeight: 700,
+              background: activeTab === t.id ? C.blue : C.darkBorder,
+              color: activeTab === t.id ? "#fff" : C.textMuted }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
+          <div style={{ fontSize: 24, marginBottom: 8 }}>⏳</div>
+          <div>Loading from Airtable...</div>
+        </div>
+      ) : activeTab === "sessions" ? (
+        <div>
+          {/* Day headers */}
+          {["Tuesday", "Thursday"].map(day => {
+            const daySessions = sortedSessions.filter(s => s.fields["Day"] === day);
+            if (daySessions.length === 0) return null;
+            return (
+              <div key={day} style={{ marginBottom: 16 }}>
+                <div style={{ color: day === "Tuesday" ? C.blueLight : C.success,
+                  fontSize: 11, fontWeight: 700, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>
+                  {day.toUpperCase()}
+                </div>
+                {daySessions.map(session => {
+                  const f = session.fields;
+                  const focus = f["Focus Area"] || "";
+                  const color = FOCUS_COLORS[focus] || C.blue;
+                  return (
+                    <div key={session.id} onClick={() => setSelected(session)}
+                      style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`,
+                        borderRadius: 12, padding: 16, marginBottom: 8, cursor: "pointer",
+                        borderLeft: `4px solid ${color}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div>
+                          <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>{f["Session Name"]}</div>
+                          <div style={{ color: C.textMuted, fontSize: 11, marginTop: 3 }}>
+                            {f["Phase"]} · {f["Duration (min)"]} min
+                          </div>
+                        </div>
+                        <span style={{ color: "#AAA", fontSize: 18 }}>›</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                        {focus && <span style={{ fontSize: 10, background: color + "25", color, border: `1px solid ${color}44`, borderRadius: 6, padding: "2px 8px", fontWeight: 700 }}>{focus}</span>}
+                        {f["Status"] && <span style={{ fontSize: 10, background: C.success + "25", color: C.success, borderRadius: 6, padding: "2px 8px" }}>{f["Status"]}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+          {sortedSessions.length === 0 && (
+            <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
+              <div>No PMIP sessions found.</div>
+            </div>
+          )}
+        </div>
+      ) : activeTab === "library" ? (
+        <div>
+          <div style={{ color: C.textMuted, fontSize: 11, marginBottom: 12 }}>
+            {library.length} exercise{library.length !== 1 ? "s" : ""} in library
+          </div>
+          {["Strength", "Speed", "Quickness", "Core", "Agility", "Power"].map(cat => {
+            const catEx = library.filter(e => e.fields["Category"] === cat);
+            if (catEx.length === 0) return null;
+            const color = FOCUS_COLORS[cat] || C.blue;
+            return (
+              <div key={cat} style={{ marginBottom: 14 }}>
+                <div style={{ color, fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>
+                  {cat.toUpperCase()} ({catEx.length})
+                </div>
+                {catEx.map(ex => (
+                  <div key={ex.id} style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`,
+                    borderRadius: 10, padding: 12, marginBottom: 6 }}>
+                    <div style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{ex.fields["Exercise Name"]}</div>
+                    {ex.fields["Reps or Duration"] && (
+                      <div style={{ color: C.textMuted, fontSize: 11, marginTop: 2, fontFamily: "monospace" }}>
+                        {ex.fields["Sets"] ? `${ex.fields["Sets"]} sets × ` : ""}{ex.fields["Reps or Duration"]}
+                        {ex.fields["Rest (seconds)"] ? ` · ${ex.fields["Rest (seconds)"]}s rest` : ""}
+                      </div>
+                    )}
+                    {ex.fields["Equipment Needed"] && (
+                      <div style={{ color: C.textDim, fontSize: 10, marginTop: 2 }}>{ex.fields["Equipment Needed"]}</div>
+                    )}
+                    {ex.fields["Coaching Cue"] && (
+                      <div style={{ color: "#FFB300", fontSize: 11, marginTop: 4, fontStyle: "italic" }}>
+                        Cue: {ex.fields["Coaching Cue"]}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+          {library.length === 0 && (
+            <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🏋️</div>
+              <div>No exercises in library yet.</div>
+              {isCoach && <div style={{ marginTop: 8, fontSize: 12 }}>Use the + Add Exercise tab to get started.</div>}
+            </div>
+          )}
+        </div>
+      ) : activeTab === "add" && isCoach ? (
+        <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 16 }}>
+          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 14, fontFamily: "monospace" }}>ADD EXERCISE TO LIBRARY</div>
+          {[
+            { label: "EXERCISE NAME *", key: "name", type: "text" },
+            { label: "SETS", key: "sets", type: "number" },
+            { label: "REPS / DURATION (e.g. 10 reps or 30s)", key: "repsOrDuration", type: "text" },
+            { label: "REST (seconds)", key: "rest", type: "number" },
+            { label: "EQUIPMENT NEEDED", key: "equipment", type: "text" },
+          ].map(f => (
+            <div key={f.key} style={{ marginBottom: 12 }}>
+              <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 5, fontFamily: "monospace" }}>{f.label}</div>
+              <input type={f.type} value={newExercise[f.key]}
+                onChange={e => setNewExercise(p => ({ ...p, [f.key]: e.target.value }))}
+                style={inp({ fontSize: 13 })} />
+            </div>
+          ))}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 5, fontFamily: "monospace" }}>CATEGORY</div>
+            <select value={newExercise.category} onChange={e => setNewExercise(p => ({ ...p, category: e.target.value }))}
+              style={{ ...inp({ fontSize: 13 }), appearance: "none" }}>
+              {["Strength", "Speed", "Quickness", "Core", "Agility", "Power", "Flexibility"].map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 5, fontFamily: "monospace" }}>TARGET METRIC</div>
+            <select value={newExercise.targetMetric} onChange={e => setNewExercise(p => ({ ...p, targetMetric: e.target.value }))}
+              style={{ ...inp({ fontSize: 13 }), appearance: "none" }}>
+              {["Push Ups", "Plank Hold", "10yd Sprint", "40yd Sprint", "5-10-5 Shuttle", "Vertical Jump", "Broad Jump", "General Fitness"].map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 5, fontFamily: "monospace" }}>DESCRIPTION</div>
+            <textarea value={newExercise.description} rows={2}
+              onChange={e => setNewExercise(p => ({ ...p, description: e.target.value }))}
+              style={{ ...inp({ fontSize: 12 }), resize: "none" }} placeholder="How to perform the exercise..." />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 5, fontFamily: "monospace" }}>COACHING CUE</div>
+            <textarea value={newExercise.cue} rows={2}
+              onChange={e => setNewExercise(p => ({ ...p, cue: e.target.value }))}
+              style={{ ...inp({ fontSize: 12 }), resize: "none" }} placeholder="Key coaching point for this exercise..." />
+          </div>
+          {saveMsg && (
+            <div style={{ color: saveMsg.includes("saved") ? C.success : C.danger,
+              fontSize: 12, marginBottom: 10, textAlign: "center" }}>{saveMsg}</div>
+          )}
+          <button onClick={saveExercise} disabled={saving}
+            style={btn(C.blue, { width: "100%", padding: 13, fontSize: 14 })}>
+            {saving ? "Saving..." : "Save to Exercise Library"}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 // ─── TRAINING PLANS (Live from Airtable) ──────────────────────────────────────
 const PLANS_TABLE_ID = "tblBeT6yn4hbgtKd9";
@@ -1633,7 +1980,7 @@ function AssessmentForm({ player, readOnly = false }) {
 function PlayerDashboard({ user, onLogout }) {
   const player = PLAYERS_DATA.find(p => p.id === user.playerId);
   const [tab, setTab] = useState("plan");
-  const tabs = [{ id: "plan", label: "My Plan" }, { id: "log", label: "Log Session" }, { id: "dashboard", label: "Dashboard" }, { id: "training", label: "Training Plans" }, { id: "assessment", label: "Assessment" }, { id: "profile", label: "My Profile" }];
+  const tabs = [{ id: "plan", label: "My Plan" }, { id: "pmip", label: "PMIP" }, { id: "log", label: "Log Session" }, { id: "dashboard", label: "Dashboard" }, { id: "training", label: "Training Plans" }, { id: "assessment", label: "Assessment" }, { id: "profile", label: "My Profile" }];
   if (!player) return <div style={{ padding: 20, color: C.textMuted }}>No training plan found.</div>;
   return (
     <div>
@@ -1656,6 +2003,7 @@ function PlayerDashboard({ user, onLogout }) {
         </div>
       )}
       {tab === "log" && <SessionLogger player={player} />}
+      {tab === "pmip" && <PMIPView playerName={player.name} isCoach={false} />}
       {tab === "dashboard" && <PerformanceDashboard playerId={player.id} />}
       {tab === "training" && <TrainingPlans filterPlayerName={player.name} />}
       {tab === "assessment" && <AssessmentForm player={player} readOnly={true} />}
