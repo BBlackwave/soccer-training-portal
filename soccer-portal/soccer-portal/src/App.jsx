@@ -781,10 +781,31 @@ function PlayerProfile({ player, canEdit = false }) {
   const [position, setPosition] = useState("");
   const [foot, setFoot] = useState("");
   const [jersey, setJersey] = useState("");
-  const [coachNotes, setCoachNotes] = useState("");
   const [editing, setEditing] = useState(false);
-  const [status, setStatus] = useState("idle"); // idle | saving | saved | error
+  const [status, setStatus] = useState("idle");
   const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadProfile(); }, []);
+
+  const loadProfile = async () => {
+    setLoading(true);
+    try {
+      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/tblpL5SzrgltxfRua/${player.id}`);
+      if (data.fields) {
+        const f = data.fields;
+        if (f["Height (inches)"]) setHeight(String(f["Height (inches)"]));
+        if (f["Weight lbs"]) setWeight(String(f["Weight lbs"]));
+        if (f["Date of Birth"]) setDob(f["Date of Birth"]);
+        if (f["Player Position"]) setPosition(f["Player Position"]);
+        if (f["Preferred Foot"]) setFoot(f["Preferred Foot"]);
+        if (f["Jersey No"]) setJersey(String(f["Jersey No"]));
+      }
+    } catch (e) {
+      console.error("Profile load error:", e);
+    }
+    setLoading(false);
+  };
 
   const bmi = height && weight
     ? ((parseFloat(weight) / (parseFloat(height) * parseFloat(height))) * 703).toFixed(1)
@@ -814,7 +835,7 @@ function PlayerProfile({ player, canEdit = false }) {
         method: "PATCH",
         body: JSON.stringify({ records: [{ id: player.id, fields }] }),
       });
-      if (res.records) { setStatus("saved"); setMsg("Profile saved!"); setEditing(false); }
+      if (res.records) { setStatus("saved"); setMsg("Profile saved!"); setEditing(false); loadProfile(); }
       else { setStatus("error"); setMsg("Save failed: " + JSON.stringify(res).slice(0, 100)); }
     } catch (e) {
       setStatus("error"); setMsg("Error: " + e.message);
@@ -830,7 +851,7 @@ function PlayerProfile({ player, canEdit = false }) {
             <div style={{ color: player.color, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>PLAYER PROFILE</div>
             <div style={{ color: C.text, fontSize: 20, fontWeight: 800, marginTop: 2 }}>{player.emoji} {player.name}</div>
           </div>
-          {canEdit && !editing && (
+          {canEdit && !editing && !loading && (
             <button onClick={() => setEditing(true)}
               style={btn(player.color, { fontSize: 11, padding: "6px 14px" })}>Edit Profile</button>
           )}
@@ -841,6 +862,13 @@ function PlayerProfile({ player, canEdit = false }) {
         </div>
       </div>
 
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 30, color: C.textMuted }}>
+          <div style={{ fontSize: 20, marginBottom: 8 }}>⏳</div>
+          <div style={{ fontSize: 12 }}>Loading profile...</div>
+        </div>
+      ) : (
+      <div>
       {/* Status message */}
       {msg !== "" && (
         <div style={{ background: status === "error" ? C.danger + "20" : C.success + "20",
@@ -960,6 +988,8 @@ function PlayerProfile({ player, canEdit = false }) {
             {status === "saving" ? "Saving..." : "Save Profile"}
           </button>
         </div>
+      )}
+      </div>
       )}
     </div>
   );
