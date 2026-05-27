@@ -2941,8 +2941,8 @@ Generate exactly ${days} training sessions (one per training day). For each sess
 
 Focus values must be one of: Strength, Cardio, Combined, Recovery, Skill
 Day values must be actual days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
-Make the plan detailed, specific, and appropriate for ${experience} level. Account for equipment: ${equipment}. Avoid exercises that stress: ${injuries}.
-IMPORTANT: Return ONLY the raw JSON array with no markdown, no code blocks, no explanation. Start your response with [ and end with ]. Nothing else.`;
+Keep each field concise (2-3 sentences max). Account for equipment: ${equipment}. Avoid: ${injuries}.
+IMPORTANT: Return ONLY the raw JSON array. Start with [ and end with ]. No markdown, no explanation.`;
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
