@@ -246,7 +246,7 @@ function RequestAccess({ onBack }) {
           "fldlv5CUPNcLp5MAJ": "Pending",
           "flde4MGWsi1jL5M4y": linkedPlayer,
           "fldariP3HOBd2ifw1": linkedPlayerId,
-        }}]}),
+        }}], typecast: true }),
       });
       if (res.records) { setDone(true); }
       else { setError("Submission failed. Try again."); }
@@ -2224,7 +2224,7 @@ function FitnessRequestAccess({ onBack }) {
           "fldwImKFm7Nbwa2fz": "fitness_client",
           "fldlv5CUPNcLp5MAJ": "Pending",
           "fldkpu62AFEBxLWiD": clientId || "",
-        }}]}),
+        }}], typecast: true }),
       });
       setDone(true);
     } catch { setError("Submission failed. Please try again."); }
