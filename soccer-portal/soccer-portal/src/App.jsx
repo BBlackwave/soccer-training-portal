@@ -37,7 +37,7 @@ async function loginFromAirtable(email, password) {
     playerId: f["Linked Player ID"] || "",
     childId: f["Linked Player ID"] || "",
     childName: f["Linked Player Name"] || "",
-    clientId: f["Client ID"] || "",
+    clientId: f["Client ID"] || f["fldkpu62AFEBxLWiD"] || "",
   };
 }
 
@@ -2367,8 +2367,17 @@ function FitnessClientDashboard({ user, onLogout }) {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [clientRes, plansRes, assessRes] = await Promise.all([
-        clientId ? airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_CLIENTS_TABLE_ID}/${clientId}`) : Promise.resolve(null),
+      // Try to fetch client data - by ID or by name search
+      let clientRes = null;
+      if (clientId) {
+        clientRes = await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_CLIENTS_TABLE_ID}/${clientId}`);
+      } else {
+        // Search by name if no clientId
+        const formula = encodeURIComponent(`{Full Name}="${user.name}"`);
+        const search = await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_CLIENTS_TABLE_ID}?filterByFormula=${formula}`);
+        if (search?.records?.[0]) clientRes = { fields: search.records[0].fields };
+      }
+      const [plansRes, assessRes] = await Promise.all([
         airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}`),
         airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_ASSESSMENTS_TABLE_ID}`),
       ]);
