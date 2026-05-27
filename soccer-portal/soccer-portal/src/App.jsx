@@ -3155,3 +3155,201 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
 }
 
 
+
+// ─── AI PLAN GENERATOR ────────────────────────────────────────────────────────
+function GeneratePlan({ clientData, clientId, clientName, onDone }) {
+  const [generating, setGenerating] = useState(false);
+  const [status, setStatus] = useState("");
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  const [planStyle, setPlanStyle] = useState("");
+
+  const athleteType = clientData?.["Athlete Type"] || "Hybrid Athlete";
+  const goal = clientData?.["Primary Goal"] || "General Fitness";
+  const experience = clientData?.["Experience Level"] || "Beginner";
+  const days = clientData?.["Training Days Per Week"] || 3;
+  const duration = clientData?.["Session Duration min"] || 60;
+  const equipment = clientData?.["Equipment Available"] || "bodyweight only";
+  const injuries = clientData?.["Injury History"] || "none";
+  const info = ATHLETE_COLORS[athleteType] || ATHLETE_COLORS["General Fitness"];
+
+  const PLAN_STYLES = {
+    "Hybrid Athlete": ["Strength + Cardio Split", "CrossFit Style WODs", "Olympic Lifting Focus", "Endurance + Strength Balance"],
+    "Distance Runner": ["Base Building (Easy Miles)", "Speed Work (Intervals + Tempo)", "Marathon Training Block", "5K / 10K Speed Focus"],
+    "Strength Training": ["Powerlifting (Squat / Bench / Deadlift)", "Bodybuilding (Hypertrophy Split)", "Full Body 3x Per Week", "Upper / Lower Split"],
+    "General Fitness": ["Beginner Full Body", "Weight Loss Circuit", "Functional Fitness", "Maintenance Plan"],
+  };
+
+  const styles = PLAN_STYLES[athleteType] || PLAN_STYLES["General Fitness"];
+
+  const generatePlan = async () => {
+    if (!planStyle) { setError("Please select a plan style first."); return; }
+    setGenerating(true); setError(""); setStatus("Analyzing your profile...");
+    try {
+      setStatus("Generating your personalized plan...");
+      const prompt = `You are an expert fitness coach. Generate a complete ${days}-day per week training plan for a client with the following profile:
+- Name: ${clientName}
+- Athlete Type: ${athleteType}
+- Plan Style: ${planStyle}
+- Goal: ${goal}
+- Experience Level: ${experience}
+- Training Days Per Week: ${days}
+- Session Duration: ${duration} minutes
+- Equipment Available: ${equipment}
+- Injury History: ${injuries}
+
+Generate exactly ${days} training sessions. For each session respond with ONLY a valid JSON array like this:
+[{"planName":"Session name e.g. Monday - Strength","day":"Monday","focus":"Strength","duration":${duration},"warmUp":"Warm up description","mainBlock":"Main workout with exercises sets and reps","finishers":"Finisher exercises","coolDown":"Cool down stretches","coachNotes":"Key coaching points"}]
+
+Focus values must be one of: Strength, Cardio, Combined, Recovery, Skill
+Day values must be actual days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
+Keep each field concise (2-3 sentences max). Account for equipment: ${equipment}. Avoid: ${injuries}.
+IMPORTANT: Return ONLY the raw JSON array. Start with [ and end with ]. No markdown, no explanation.`;
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": import.meta.env.VITE_ANTHROPIC_KEY || "",
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 8000,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error("API: " + JSON.stringify(data.error));
+      if (!data.content || !data.content[0]) throw new Error("Empty response: " + JSON.stringify(data).slice(0, 300));
+      const text = data.content[0].text || "";
+
+      let sessions = null;
+      try { sessions = JSON.parse(text); } catch {}
+      if (!sessions) {
+        const m = text.match(/\[[\s\S]*\]/);
+        if (m) { try { sessions = JSON.parse(m[0]); } catch {} }
+      }
+      if (!sessions) {
+        const m = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (m) { try { sessions = JSON.parse(m[1]); } catch {} }
+      }
+      if (!sessions || !Array.isArray(sessions)) {
+        throw new Error("Parse failed. Got: " + text.slice(0, 300));
+      }
+
+      setStatus(`Saving ${sessions.length} sessions to Airtable...`);
+      for (let i = 0; i < sessions.length; i++) {
+        const s = sessions[i];
+        setStatus(`Saving session ${i + 1} of ${sessions.length}...`);
+        await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}`, {
+          method: "POST",
+          body: JSON.stringify({ records: [{ fields: {
+            "Plan Name": s.planName || `${clientName} - ${s.day}`,
+            "Client Name": clientName,
+            "Athlete Type": athleteType,
+            "Phase": "Phase 1",
+            "Day": s.day,
+            "Focus": s.focus || "Combined",
+            "Duration min": parseInt(s.duration) || duration,
+            "Warm Up": s.warmUp || "",
+            "Main Block": s.mainBlock || "",
+            "Finishers": s.finishers || "",
+            "Cool Down": s.coolDown || "",
+            "Coach Notes": s.coachNotes || "",
+            "Status": "Active",
+          }}], typecast: true }),
+        });
+      }
+      setStatus("Plan saved successfully!");
+      setDone(true);
+    } catch (e) {
+      console.error(e);
+      setError("Generation failed: " + e.message);
+    }
+    setGenerating(false);
+  };
+
+  if (done) return (
+    <div style={{ padding: 16, textAlign: "center" }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
+      <div style={{ color: C.text, fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Plan Generated!</div>
+      <div style={{ color: C.textMuted, fontSize: 13, marginBottom: 24 }}>Your {planStyle} plan has been saved. Go to My Plan to view it.</div>
+      <button onClick={onDone} style={btn(info.color, { padding: "12px 32px", fontSize: 14 })}>View My Plan</button>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ background: info.color + "20", border: `1px solid ${info.color}44`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ color: info.color, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>AI PLAN GENERATOR</div>
+        <div style={{ color: C.text, fontSize: 16, fontWeight: 800, marginTop: 2 }}>{info.emoji} {athleteType}</div>
+        <div style={{ color: C.textMuted, fontSize: 12, marginTop: 4 }}>{experience} · {goal} · {days}x/week · {duration} min</div>
+      </div>
+      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>YOUR PROFILE</div>
+        {[{ label: "Equipment", value: equipment }, { label: "Injuries", value: injuries || "None" }].map(({ label, value }) => (
+          <div key={label} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+            <span style={{ color: C.textMuted, fontSize: 12, minWidth: 80 }}>{label}:</span>
+            <span style={{ color: C.text, fontSize: 12 }}>{value}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>SELECT PLAN STYLE</div>
+        {styles.map(style => (
+          <button key={style} onClick={() => setPlanStyle(style)}
+            style={{ width: "100%", padding: "12px 16px", borderRadius: 10, marginBottom: 8,
+              border: `2px solid ${planStyle === style ? info.color : C.darkBorder}`,
+              background: planStyle === style ? info.color + "20" : C.darkCard,
+              cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ color: planStyle === style ? info.color : C.text, fontSize: 13, fontWeight: 600 }}>{style}</span>
+            {planStyle === style && <span style={{ color: info.color, fontSize: 16 }}>✓</span>}
+          </button>
+        ))}
+      </div>
+      {status && (
+        <div style={{ background: info.color + "15", border: `1px solid ${info.color}44`, borderRadius: 8, padding: 12, marginBottom: 12, textAlign: "center" }}>
+          <div style={{ color: info.color, fontSize: 13, fontWeight: 600 }}>{status}</div>
+        </div>
+      )}
+      {error && <div style={{ color: C.danger, fontSize: 12, marginBottom: 12, textAlign: "center" }}>{error}</div>}
+      <button onClick={generatePlan} disabled={generating || !planStyle}
+        style={btn(planStyle && !generating ? info.color : C.textDim, { width: "100%", padding: 16, fontSize: 15, fontWeight: 800, cursor: planStyle && !generating ? "pointer" : "not-allowed" })}>
+        {generating ? status || "Generating..." : "✦ Generate Plan For Me"}
+      </button>
+      <div style={{ color: C.textDim, fontSize: 11, textAlign: "center", marginTop: 8 }}>
+        AI generates a full {days}-day plan tailored to your profile
+      </div>
+    </div>
+  );
+}
+
+// ─── APP ──────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [screen, setScreen] = useState("login");
+
+  if (screen === "request_soccer") return <RequestAccess onBack={() => setScreen("login")} />;
+  if (screen === "request_fitness") return <FitnessRequestAccess onBack={() => setScreen("login")} />;
+  if (!user) return <Login onLogin={setUser} onRequestAccess={(type) => setScreen(type === "fitness" ? "request_fitness" : "request_soccer")} />;
+  const logout = () => { setUser(null); setScreen("login"); };
+  const role = user.role?.name || user.role || "";
+  if (role === "coach") return <CoachDashboard user={{...user, role: "coach"}} onLogout={logout} />;
+  if (role === "player") return <PlayerDashboard user={{...user, role: "player"}} onLogout={logout} />;
+  if (role === "parent") return <ParentDashboard user={{...user, role: "parent"}} onLogout={logout} />;
+  if (role === "fitness_client") return <FitnessClientDashboard user={{...user, role: "fitness_client"}} onLogout={logout} />;
+  return (
+    <div style={{ minHeight: "100vh", background: "#0A1628", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ textAlign: "center", color: "#F0F4FF" }}>
+        <div style={{ fontSize: 32, marginBottom: 16 }}>⚽</div>
+        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Welcome, {user.name}</div>
+        <div style={{ fontSize: 13, color: "#7A92B8", marginBottom: 4 }}>Role: {JSON.stringify(user.role)}</div>
+        <div style={{ fontSize: 11, color: "#4A6080", marginBottom: 20 }}>Contact your coach if you cannot access your dashboard.</div>
+        <button onClick={logout} style={{ background: "#2563EB", border: "none", borderRadius: 8, padding: "10px 24px", color: "#fff", fontSize: 14, cursor: "pointer" }}>Sign Out</button>
+      </div>
+    </div>
+  );
+}
