@@ -521,10 +521,18 @@ function ManageUsers() {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const result = await callClaude(`List ALL records from Airtable base ${AIRTABLE_BASE_ID}, table ${USERS_TABLE_ID}. Return ONLY a JSON array of objects, each with: id, name (from Name field), email (from Email field), role (from Role field), status (from Status field), playerName (from Linked Player Name field). No extra text.`);
-      const match = result.match(/\[[\s\S]*\]/);
-      if (match) setUsers(JSON.parse(match[0]));
-    } catch {}
+      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}`);
+      if (data.records) {
+        setUsers(data.records.map(r => ({
+          id: r.id,
+          name: r.fields["Name"] || r.fields["fldBDjaUIWTm6PagP"] || "",
+          email: r.fields["Email"] || r.fields["flddeq09ZwaReoN5s"] || "",
+          role: r.fields["Role"]?.name || r.fields["Role"] || "",
+          status: r.fields["Status"]?.name || r.fields["Status"] || "",
+          playerName: r.fields["Linked Player Name"] || r.fields["flde4MGWsi1jL5M4y"] || "",
+        })));
+      }
+    } catch (e) { console.error("loadUsers error:", e); }
     setLoading(false); setLoaded(true);
   };
 
