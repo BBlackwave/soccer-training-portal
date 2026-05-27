@@ -2948,7 +2948,7 @@ IMPORTANT: Return ONLY the raw JSON array with no markdown, no code blocks, no e
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": "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",
+          "x-api-key": "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",
           "anthropic-version": "2023-06-01",
           "anthropic-dangerous-direct-browser-access": "true",
         },
