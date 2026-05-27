@@ -2367,21 +2367,28 @@ function FitnessClientDashboard({ user, onLogout }) {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Try to fetch client data - by ID or by name search
-      let clientRes = null;
-      if (clientId) {
-        clientRes = await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_CLIENTS_TABLE_ID}/${clientId}`);
-      } else {
-        // Search by name if no clientId
-        const formula = encodeURIComponent(`{Full Name}="${user.name}"`);
-        const search = await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_CLIENTS_TABLE_ID}?filterByFormula=${formula}`);
-        if (search?.records?.[0]) clientRes = { fields: search.records[0].fields };
-      }
-      const [plansRes, assessRes] = await Promise.all([
+      // Always search by name - most reliable approach
+      const formula = encodeURIComponent(`OR({Full Name}="${user.name}",{Email}="${user.email}")`);
+      const [clientSearch, plansRes, assessRes] = await Promise.all([
+        airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_CLIENTS_TABLE_ID}?filterByFormula=${formula}`),
         airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}`),
         airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_ASSESSMENTS_TABLE_ID}`),
       ]);
-      if (clientRes?.fields) setClientData(clientRes.fields);
+      if (clientSearch?.records?.[0]) {
+        const f = clientSearch.records[0].fields;
+        // Map field IDs to readable names
+        setClientData({
+          "Full Name": f["Full Name"] || f["fld0ColIpLAvVdUYM"] || user.name,
+          "Athlete Type": f["Athlete Type"]?.name || f["Athlete Type"] || f["fldsnpCCD8JfFlBQ1"]?.name || f["fldsnpCCD8JfFlBQ1"] || "Hybrid Athlete",
+          "Experience Level": f["Experience Level"]?.name || f["Experience Level"] || f["fldeGiqEzEK9dzNen"]?.name || "Beginner",
+          "Primary Goal": f["Primary Goal"]?.name || f["Primary Goal"] || f["fldgvf9hoILEwqQvx"]?.name || "General Fitness",
+          "Training Days Per Week": f["Training Days Per Week"] || f["fldTtUvLAEXTQLneU"] || 3,
+          "Session Duration min": f["Session Duration min"] || f["fldXN7lxlQFs5I8nd"] || 60,
+          "Equipment Available": f["Equipment Available"] || f["fldEquipment"] || "bodyweight only",
+          "Injury History": f["Injury History"] || "",
+          "Status": f["Status"]?.name || "Active",
+        });
+      }
       if (plansRes?.records) {
         setPlans(plansRes.records.filter(r =>
           (r.fields["Client Name"] || "").toLowerCase() === user.name.toLowerCase()
