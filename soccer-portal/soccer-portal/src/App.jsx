@@ -150,7 +150,7 @@ async function callClaude(prompt) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514", max_tokens: 1000,
+      model: "claude-sonnet-4-6", max_tokens: 1000,
       messages: [{ role: "user", content: prompt }],
       mcp_servers: [AIRTABLE_MCP],
     }),
@@ -2953,7 +2953,7 @@ IMPORTANT: Return ONLY the raw JSON array with no markdown, no code blocks, no e
           "anthropic-dangerous-direct-browser-access": "true",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-6",
           max_tokens: 4000,
           messages: [{ role: "user", content: prompt }],
         }),
