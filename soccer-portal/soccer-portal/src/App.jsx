@@ -2367,27 +2367,49 @@ function FitnessClientDashboard({ user, onLogout }) {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Always search by name - most reliable approach
-      const formula = encodeURIComponent(`OR({Full Name}="${user.name}",{Email}="${user.email}")`);
+      // Fetch all clients and filter in JS - most reliable
       const [clientSearch, plansRes, assessRes] = await Promise.all([
-        airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_CLIENTS_TABLE_ID}?filterByFormula=${formula}`),
+        airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_CLIENTS_TABLE_ID}`),
         airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}`),
         airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_ASSESSMENTS_TABLE_ID}`),
       ]);
-      if (clientSearch?.records?.[0]) {
-        const f = clientSearch.records[0].fields;
-        // Map field IDs to readable names
-        setClientData({
-          "Full Name": f["Full Name"] || f["fld0ColIpLAvVdUYM"] || user.name,
-          "Athlete Type": f["Athlete Type"]?.name || f["Athlete Type"] || f["fldsnpCCD8JfFlBQ1"]?.name || f["fldsnpCCD8JfFlBQ1"] || "Hybrid Athlete",
-          "Experience Level": f["Experience Level"]?.name || f["Experience Level"] || f["fldeGiqEzEK9dzNen"]?.name || "Beginner",
-          "Primary Goal": f["Primary Goal"]?.name || f["Primary Goal"] || f["fldgvf9hoILEwqQvx"]?.name || "General Fitness",
-          "Training Days Per Week": f["Training Days Per Week"] || f["fldTtUvLAEXTQLneU"] || 3,
-          "Session Duration min": f["Session Duration min"] || f["fldXN7lxlQFs5I8nd"] || 60,
-          "Equipment Available": f["Equipment Available"] || f["fldEquipment"] || "bodyweight only",
-          "Injury History": f["Injury History"] || "",
-          "Status": f["Status"]?.name || "Active",
+      if (clientSearch?.records) {
+        // Find matching client by name or email
+        const match = clientSearch.records.find(r => {
+          const f = r.fields;
+          const name = Object.values(f).find(v => typeof v === "string" && v.toLowerCase().includes(user.name.toLowerCase().split(" ")[0]));
+          const email = Object.values(f).find(v => typeof v === "string" && v === user.email);
+          return name || email;
         });
+        if (match) {
+          const f = match.fields;
+          // Get values - handle both field names and objects
+          const getVal = (v) => v?.name || v || null;
+          setClientData({
+            "Full Name": getVal(f["Full Name"]) || user.name,
+            "Athlete Type": getVal(f["Athlete Type"]) || "Hybrid Athlete",
+            "Experience Level": getVal(f["Experience Level"]) || "Beginner",
+            "Primary Goal": getVal(f["Primary Goal"]) || "General Fitness",
+            "Training Days Per Week": f["Training Days Per Week"] || 3,
+            "Session Duration min": f["Session Duration min"] || 60,
+            "Equipment Available": f["Equipment Available"] || "bodyweight only",
+            "Injury History": f["Injury History"] || "",
+            "Status": getVal(f["Status"]) || "Active",
+          });
+        } else {
+          // No match - use defaults so UI still shows
+          setClientData({
+            "Full Name": user.name,
+            "Athlete Type": "Hybrid Athlete",
+            "Experience Level": "Beginner",
+            "Primary Goal": "General Fitness",
+            "Training Days Per Week": 3,
+            "Session Duration min": 60,
+            "Equipment Available": "bodyweight only",
+            "Injury History": "",
+            "Status": "Active",
+          });
+        }
       }
       if (plansRes?.records) {
         setPlans(plansRes.records.filter(r =>
