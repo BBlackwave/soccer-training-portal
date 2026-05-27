@@ -2824,9 +2824,24 @@ export default function App() {
   if (screen === "request_fitness") return <FitnessRequestAccess onBack={() => setScreen("login")} />;
   if (!user) return <Login onLogin={setUser} onRequestAccess={(type) => setScreen(type === "fitness" ? "request_fitness" : "request_soccer")} />;
   const logout = () => { setUser(null); setScreen("login"); };
-  if (user.role === "coach") return <CoachDashboard user={user} onLogout={logout} />;
-  if (user.role === "player") return <PlayerDashboard user={user} onLogout={logout} />;
-  if (user.role === "parent") return <ParentDashboard user={user} onLogout={logout} />;
-  if (user.role === "fitness_client") return <FitnessClientDashboard user={user} onLogout={logout} />;
-  return null;
+  // Normalize role - handle object format from Airtable
+  const role = user.role?.name || user.role || "";
+  if (role === "coach") return <CoachDashboard user={{...user, role: "coach"}} onLogout={logout} />;
+  if (role === "player") return <PlayerDashboard user={{...user, role: "player"}} onLogout={logout} />;
+  if (role === "parent") return <ParentDashboard user={{...user, role: "parent"}} onLogout={logout} />;
+  if (role === "fitness_client") return <FitnessClientDashboard user={{...user, role: "fitness_client"}} onLogout={logout} />;
+  // Fallback - show what role we got so we can debug
+  return (
+    <div style={{ minHeight: "100vh", background: "#0A1628", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ textAlign: "center", color: "#F0F4FF" }}>
+        <div style={{ fontSize: 32, marginBottom: 16 }}>⚽</div>
+        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Welcome, {user.name}</div>
+        <div style={{ fontSize: 13, color: "#7A92B8", marginBottom: 4 }}>Role: {JSON.stringify(user.role)}</div>
+        <div style={{ fontSize: 11, color: "#4A6080", marginBottom: 20 }}>Contact your coach if you cannot access your dashboard.</div>
+        <button onClick={logout} style={{ background: "#2563EB", border: "none", borderRadius: 8, padding: "10px 24px", color: "#fff", fontSize: 14, cursor: "pointer" }}>
+          Sign Out
+        </button>
+      </div>
+    </div>
+  );
 }
