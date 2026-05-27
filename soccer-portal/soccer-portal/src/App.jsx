@@ -2528,19 +2528,26 @@ function FitnessClientDashboard({ user, onLogout }) {
         </div>
       )}
 
-      {tab === "log" && <FitnessSessionLogger clientId={clientId} clientName={user.name} />}
       {tab === "log" && (
         <FitnessSessionLogger
           clientName={user.name}
           clientId={clientId}
           plans={plans}
-          athleteType={clientData?.["Athlete Type"] || "General Fitness"}
+          athleteType={clientData?.["Athlete Type"] || "Hybrid Athlete"}
           onSaved={loadData}
         />
       )}
       {tab === "generate" && (
         <GeneratePlan
-          clientData={clientData}
+          clientData={clientData || {
+            "Athlete Type": "Hybrid Athlete",
+            "Primary Goal": "General Fitness",
+            "Experience Level": "Beginner",
+            "Training Days Per Week": 3,
+            "Session Duration min": 60,
+            "Equipment Available": "bodyweight only",
+            "Injury History": "",
+          }}
           clientId={clientId}
           clientName={user.name}
           onDone={() => { setTab("plans"); loadData(); }}
