@@ -794,6 +794,7 @@ function CoachDashboard({ user, onLogout }) {
       )}
       {tab === "users" && <ManageUsers />}
     </div>
+    )}
   );
 }
 
