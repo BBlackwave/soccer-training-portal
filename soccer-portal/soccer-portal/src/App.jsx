@@ -2933,88 +2933,33 @@ function CoachFitnessSection({ onLogout, user }) {
 
 
 // ─── FITNESS SESSION LOGGER ───────────────────────────────────────────────────
+const FITNESS_SESSIONS_TABLE_ID = "tblAyUXkEk2fkyJL4";
+
+const setInpF = {
+  border: "1px solid #1C2D4A", borderRadius: 5, padding: "5px 6px",
+  fontSize: 12, outline: "none", width: "100%", boxSizing: "border-box",
+  background: "#0D1825", color: "#F0F4FF", fontFamily: "monospace",
+};
+
 function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSaved }) {
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const [exercises, setExercises] = useState({});
   const [rating, setRating] = useState(0);
   const [notes, setNotes] = useState("");
+  const [warmUpLog, setWarmUpLog] = useState("");
+  const [mainLog, setMainLog] = useState("");
+  const [finishersLog, setFinishersLog] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [prevSession, setPrevSession] = useState(null);
-  const [showComparison, setShowComparison] = useState(false);
 
   const info = ATHLETE_COLORS[athleteType] || ATHLETE_COLORS["General Fitness"];
   const color = info.color;
 
-  // Parse exercises from plan's Main Block
-  const parseExercises = (plan) => {
-    const f = plan.fields;
-    const mainBlock = f["Main Block"] || f["Drill Details"] || f["Exercises & Sets/Reps"] || "";
-    const exList = [];
-    if (!mainBlock) return exList;
-    
-    // Split by common delimiters to get individual exercises
-    // Try splitting by numbered list first (1. 2. 3.)
-    const numbered = mainBlock.split(/(?=\d+\.\s+[A-Z])/);
-    if (numbered.length > 2) {
-      numbered.forEach((chunk, i) => {
-        const clean = chunk.replace(/^\d+\.\s*/, "").split(/(\(|,\s*rest|\. )/)[0].trim();
-        if (clean.length > 4 && clean.length < 80) {
-          exList.push({ id: `ex-${i}`, name: clean.slice(0, 70), line: chunk.trim() });
-        }
-      });
-      if (exList.length > 1) return exList.slice(0, 12);
-    }
-    
-    // Try splitting by ", N " patterns (e.g. "squats (rest 60s), 3 sets of push-ups")
-    const commaNum = mainBlock.split(/,\s*(?=\d+\s+(?:sets?|rounds?|min|reps?))/i);
-    if (commaNum.length > 2) {
-      commaNum.forEach((chunk, i) => {
-        const clean = chunk.replace(/^[\d\s]+(?:sets?\s*(?:of|x)\s*[\d]+\s*)?/i, "").split(/[,(]/)[0].trim();
-        if (clean.length > 4 && clean.length < 80) {
-          exList.push({ id: `ex-${i}`, name: clean.slice(0, 70), line: chunk.trim() });
-        }
-      });
-      if (exList.length > 1) return exList.slice(0, 12);
-    }
-    
-    // Final fallback: split by sentences and use each as an exercise
-    const sentences = mainBlock.split(/\.(?=\s+[A-Z])|(?<=\))\.?\s+(?=[A-Z3])/).filter(s => s.trim().length > 8);
-    sentences.slice(0, 8).forEach((s, i) => {
-      const clean = s.trim().slice(0, 70);
-      if (clean.length > 4) {
-        exList.push({ id: `ex-${i}`, name: clean, line: clean });
-      }
-    });
-    
-    // If still nothing, just show the whole block as one item
-    if (exList.length === 0 && mainBlock.length > 0) {
-      exList.push({ id: "ex-0", name: "Main Workout Block", line: mainBlock });
-    }
-    
-    return exList.slice(0, 12);
-  };
-
-
-  const initExercises = (plan) => {
-    const exList = parseExercises(plan);
-    const init = {};
-    exList.forEach(ex => {
-      init[ex.id] = { sets: [{ reps: "", weight: "", note: "" }], done: false };
-    });
-    setExercises(init);
-    return exList;
-  };
-
-  const [exList, setExList] = useState([]);
-
   const selectPlan = async (plan) => {
     setSelectedPlan(plan);
-    const list = initExercises(plan);
-    setExList(list);
-    setSaved(false); setShowComparison(false); setPrevSession(null);
-    // Load previous session for comparison
+    setSaved(false); setPrevSession(null);
+    setWarmUpLog(""); setMainLog(""); setFinishersLog(""); setNotes(""); setRating(0);
     try {
       const formula = encodeURIComponent(`AND({Client Name}="${clientName}",{Plan Name}="${plan.fields["Plan Name"]}")`);
       const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_SESSIONS_TABLE_ID}?filterByFormula=${formula}&sort[0][field]=Session Date&sort[0][direction]=desc&maxRecords=1`);
@@ -3022,40 +2967,14 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
     } catch {}
   };
 
-  const updateSet = (exId, setIdx, field, value) => {
-    setExercises(prev => {
-      const sets = [...prev[exId].sets];
-      sets[setIdx] = { ...sets[setIdx], [field]: value };
-      return { ...prev, [exId]: { ...prev[exId], sets } };
-    });
-  };
-
-  const addSet = (exId) => {
-    setExercises(prev => ({
-      ...prev,
-      [exId]: { ...prev[exId], sets: [...prev[exId].sets, { reps: "", weight: "", note: "" }] }
-    }));
-  };
-
-  const completed = exList.filter(ex => exercises[ex.id]?.sets.some(s => s.reps !== "")).length;
-  const pct = exList.length > 0 ? Math.round((completed / exList.length) * 100) : 0;
-
   const saveSession = async () => {
     setSaving(true); setError("");
     const today = new Date().toISOString().split("T")[0];
-    
-    // Build exercises logged text
-    let logText = [];
-    exList.forEach(ex => {
-      const data = exercises[ex.id];
-      const sets = data?.sets.filter(s => s.reps) || [];
-      if (sets.length > 0) {
-        const setLines = sets.map((s, i) =>
-          `  Set ${i+1}: ${s.reps} reps${s.weight ? ` @ ${s.weight}` : ""}${s.note ? ` — ${s.note}` : ""}`
-        ).join("\n");
-        logText.push(`${ex.name}:\n${setLines}`);
-      }
-    });
+    const logText = [
+      warmUpLog ? `WARM UP:\n${warmUpLog}` : "",
+      mainLog ? `MAIN BLOCK:\n${mainLog}` : "",
+      finishersLog ? `FINISHERS:\n${finishersLog}` : "",
+    ].filter(Boolean).join("\n\n");
 
     try {
       const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_SESSIONS_TABLE_ID}`, {
@@ -3063,13 +2982,13 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
         body: JSON.stringify({ records: [{ fields: {
           "Session Title": `${clientName} — ${selectedPlan?.fields["Plan Name"]} — ${today}`,
           "Client Name": clientName,
-          "Client ID": clientId,
+          "Client ID": clientId || "",
           "Plan Name": selectedPlan?.fields["Plan Name"] || "",
           "Session Date": today,
           "Athlete Type": athleteType,
-          "Focus": selectedPlan?.fields["Focus"] || "",
+          "Focus": selectedPlan?.fields["Focus"]?.name || selectedPlan?.fields["Focus"] || "",
           "Duration min": selectedPlan?.fields["Duration min"] || 60,
-          "Exercises Logged": logText.join("\n\n"),
+          "Exercises Logged": logText || notes,
           "Overall Notes": notes,
           "Rating": rating || null,
           "Logged By": clientName,
@@ -3077,217 +2996,162 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
       });
       if (res.records) {
         setSaved(true);
-        if (prevSession) setShowComparison(true);
         if (onSaved) onSaved();
       } else setError("Save failed. Try again.");
-    } catch { setError("Network error. Try again."); }
+    } catch (e) { setError("Error: " + e.message); }
     setSaving(false);
   };
 
-  // Comparison view
-  if (showComparison && prevSession) {
-    const prevLog = prevSession.fields["Exercises Logged"] || "";
-    const prevDate = prevSession.fields["Session Date"] || "";
-    return (
-      <div style={{ padding: 16 }}>
-        <div style={{ background: C.success + "20", border: `1px solid ${C.success}`, borderRadius: 12, padding: 14, marginBottom: 16, textAlign: "center" }}>
-          <div style={{ fontSize: 24 }}>✅</div>
-          <div style={{ color: C.success, fontWeight: 800, fontSize: 16, marginTop: 4 }}>Session Saved!</div>
-        </div>
-        <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
-          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>
-            VS PREVIOUS SESSION ({prevDate})
+  if (saved) return (
+    <div style={{ padding: 16 }}>
+      <div style={{ background: C.success + "20", border: `1px solid ${C.success}`, borderRadius: 12, padding: 20, textAlign: "center", marginBottom: 16 }}>
+        <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+        <div style={{ color: C.success, fontWeight: 800, fontSize: 16 }}>Session Saved!</div>
+        {prevSession && (
+          <div style={{ color: C.textMuted, fontSize: 12, marginTop: 8 }}>
+            Last session: {prevSession.fields["Session Date"]}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-            <div style={{ background: color + "15", border: `1px solid ${color}44`, borderRadius: 8, padding: 10 }}>
-              <div style={{ color: color, fontSize: 10, fontWeight: 700, marginBottom: 4 }}>TODAY</div>
-              <div style={{ color: C.text, fontSize: 11, fontFamily: "monospace" }}>
-                {completed} exercises logged
-              </div>
-              {rating > 0 && <div style={{ color: "#FFB300", fontSize: 11 }}>{"⭐".repeat(rating)}</div>}
-            </div>
-            <div style={{ background: C.darkBorder, borderRadius: 8, padding: 10 }}>
-              <div style={{ color: C.textMuted, fontSize: 10, fontWeight: 700, marginBottom: 4 }}>LAST TIME</div>
-              <div style={{ color: C.textMuted, fontSize: 11, fontFamily: "monospace" }}>
-                {prevLog.split("\n\n").filter(Boolean).length} exercises logged
-              </div>
-              {prevSession.fields["Rating"] > 0 && <div style={{ color: "#FFB300", fontSize: 11 }}>{"⭐".repeat(prevSession.fields["Rating"])}</div>}
-            </div>
-          </div>
-          <div style={{ color: C.textMuted, fontSize: 11, fontStyle: "italic", textAlign: "center" }}>
-            Keep it up! Consistency is the key to progress.
-          </div>
-        </div>
-        <button onClick={() => { setSelectedPlan(null); setExList([]); setSaved(false); setShowComparison(false); setRating(0); setNotes(""); }}
-          style={btn(color, { width: "100%", padding: 12 })}>
-          Log Another Session
-        </button>
+        )}
       </div>
-    );
-  }
+      <button onClick={() => { setSelectedPlan(null); setSaved(false); }}
+        style={btn(color, { width: "100%", padding: 12 })}>
+        Log Another Session
+      </button>
+    </div>
+  );
 
   if (!selectedPlan) {
     return (
       <div style={{ padding: 16 }}>
-        <div style={{ color: C.text, fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Session Logger</div>
-        <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 16 }}>Select today's workout to log</div>
-        {plans.length === 0 ? (
+        <div style={{ color: C.text, fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Log Session</div>
+        <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 16 }}>Select today's workout</div>
+        {!plans || plans.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
             <div>No plans yet. Generate a plan first.</div>
           </div>
-        ) : plans.map(plan => (
-          <div key={plan.id} onClick={() => selectPlan(plan)}
-            style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12,
-              padding: 16, marginBottom: 10, cursor: "pointer", borderLeft: `4px solid ${color}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>{plan.fields["Plan Name"]}</div>
-                <div style={{ color: C.textMuted, fontSize: 11, marginTop: 2 }}>
-                  {plan.fields["Day"]} · {plan.fields["Focus"]} · {plan.fields["Duration min"]} min
+        ) : plans.map(plan => {
+          const f = plan.fields;
+          const day = f["Day"]?.name || f["Day"] || "";
+          const focus = f["Focus"]?.name || f["Focus"] || "";
+          const planName = f["Plan Name"] || "Workout";
+          return (
+            <div key={plan.id} onClick={() => selectPlan(plan)}
+              style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12,
+                padding: 16, marginBottom: 10, cursor: "pointer", borderLeft: `4px solid ${color}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>{planName}</div>
+                  <div style={{ color: C.textMuted, fontSize: 11, marginTop: 2 }}>
+                    {day} · {focus} · {f["Duration min"] || 60} min
+                  </div>
                 </div>
+                <span style={{ color: "#AAA", fontSize: 18 }}>›</span>
               </div>
-              <span style={{ color: "#AAA", fontSize: 18 }}>›</span>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   }
 
+  const f = selectedPlan.fields;
+  const planName = f["Plan Name"] || "Workout";
+  const warmUp = f["Warm Up"] || "";
+  const mainBlock = f["Main Block"] || "";
+  const finishers = f["Finishers"] || "";
+  const coolDown = f["Cool Down"] || "";
+
   return (
     <div style={{ padding: 16 }}>
       {/* Header */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
-        <button onClick={() => { setSelectedPlan(null); setExList([]); }}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14 }}>
+        <button onClick={() => setSelectedPlan(null)}
           style={{ background: C.darkBorder, border: "none", borderRadius: 6, padding: "5px 10px", color: C.text, cursor: "pointer", fontSize: 12 }}>
           ← Back
         </button>
         <div>
-          <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>{selectedPlan.fields["Plan Name"]}</div>
-          <div style={{ color: C.textMuted, fontSize: 11 }}>{selectedPlan.fields["Day"]} · {selectedPlan.fields["Focus"]}</div>
+          <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>{planName}</div>
+          <div style={{ color: C.textMuted, fontSize: 11 }}>{f["Day"]?.name || f["Day"]} · {f["Focus"]?.name || f["Focus"]}</div>
         </div>
       </div>
 
-      {/* Progress */}
-      <div style={{ background: color + "15", border: `1px solid ${color}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <div style={{ color: C.text, fontSize: 12 }}>{completed}/{exList.length} exercises logged</div>
-          <div style={{ color: color, fontSize: 16, fontWeight: 800, fontFamily: "monospace" }}>{pct}%</div>
-        </div>
-        <div style={{ background: C.darkBorder, borderRadius: 4, height: 5 }}>
-          <div style={{ height: 5, borderRadius: 4, background: color, width: `${pct}%`, transition: "width 0.3s" }} />
-        </div>
-      </div>
-
-      {/* Previous session note */}
       {prevSession && (
         <div style={{ background: "#FFB30015", border: "1px solid #FFB30044", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 11, color: "#FFB300" }}>
-          Last logged: {prevSession.fields["Session Date"]} · Beat your previous session!
+          Last logged: {prevSession.fields["Session Date"]} — beat your previous session!
         </div>
       )}
 
-      {/* Exercises */}
-      {exList.map(ex => {
-        const data = exercises[ex.id] || { sets: [{ reps: "", weight: "", note: "" }] };
-        const anyDone = data.sets.some(s => s.reps !== "");
-        return (
-          <div key={ex.id} style={{ background: C.darkCard, border: `1px solid ${anyDone ? color : C.darkBorder}`,
-            borderRadius: 10, padding: 12, marginBottom: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 7, height: 7, borderRadius: "50%", background: anyDone ? color : C.textDim, flexShrink: 0 }} />
-                <div style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{ex.name}</div>
-              </div>
-              <button onClick={() => addSet(ex.id)}
-                style={{ background: color + "25", border: `1px solid ${color}44`, borderRadius: 6,
-                  padding: "3px 8px", color, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>
-                + Set
-              </button>
-            </div>
-            {/* Column headers */}
-            <div style={{ display: "grid", gridTemplateColumns: "20px 1fr 1fr 2fr", gap: 4, marginBottom: 4 }}>
-              <span />
-              <span style={{ fontSize: 9, color: C.textDim }}>REPS</span>
-              <span style={{ fontSize: 9, color: C.textDim }}>WEIGHT</span>
-              <span style={{ fontSize: 9, color: C.textDim }}>NOTE</span>
-            </div>
-            {data.sets.map((s, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "20px 1fr 1fr 2fr", gap: 4, marginBottom: 4 }}>
-                <span style={{ fontSize: 9, color: C.textDim, textAlign: "center", lineHeight: "26px" }}>S{i+1}</span>
-                <input style={setInpF} placeholder="Reps" value={s.reps}
-                  onChange={e => updateSet(ex.id, i, "reps", e.target.value)} />
-                <input style={setInpF} placeholder="Wt/Time" value={s.weight}
-                  onChange={e => updateSet(ex.id, i, "weight", e.target.value)} />
-                <input style={setInpF} placeholder="Note" value={s.note}
-                  onChange={e => updateSet(ex.id, i, "note", e.target.value)} />
-              </div>
-            ))}
-          </div>
-        );
-      })}
+      {/* Warm Up */}
+      {warmUp && (
+        <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+          <div style={{ color: "#FFB300", fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>WARM UP</div>
+          <div style={{ color: C.textMuted, fontSize: 11, lineHeight: 1.5, marginBottom: 8 }}>{warmUp}</div>
+          <textarea placeholder="Log your warm up (e.g. completed, how you felt, modifications...)"
+            value={warmUpLog} rows={2} onChange={e => setWarmUpLog(e.target.value)}
+            style={{ ...setInpF, resize: "none", width: "100%", padding: "6px 8px" }} />
+        </div>
+      )}
+
+      {/* Main Block */}
+      {mainBlock && (
+        <div style={{ background: C.darkCard, border: `1px solid ${color}44`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+          <div style={{ color, fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>MAIN WORKOUT</div>
+          <div style={{ color: C.textMuted, fontSize: 11, lineHeight: 1.5, marginBottom: 8 }}>{mainBlock}</div>
+          <textarea placeholder="Log your performance (e.g. weights used, reps completed, modifications...)"
+            value={mainLog} rows={4} onChange={e => setMainLog(e.target.value)}
+            style={{ ...setInpF, resize: "none", width: "100%", padding: "6px 8px" }} />
+        </div>
+      )}
+
+      {/* Finishers */}
+      {finishers && (
+        <div style={{ background: C.darkCard, border: `1px solid #EF444444`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+          <div style={{ color: "#EF4444", fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>FINISHERS</div>
+          <div style={{ color: C.textMuted, fontSize: 11, lineHeight: 1.5, marginBottom: 8 }}>{finishers}</div>
+          <textarea placeholder="Log finisher results..."
+            value={finishersLog} rows={2} onChange={e => setFinishersLog(e.target.value)}
+            style={{ ...setInpF, resize: "none", width: "100%", padding: "6px 8px" }} />
+        </div>
+      )}
+
+      {/* Cool Down */}
+      {coolDown && (
+        <div style={{ background: C.darkCard, border: `1px solid #64B5F644`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+          <div style={{ color: "#64B5F6", fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>COOL DOWN</div>
+          <div style={{ color: C.textMuted, fontSize: 11, lineHeight: 1.5 }}>{coolDown}</div>
+        </div>
+      )}
 
       {/* Rating + Notes */}
       <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
         <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>SESSION RATING</div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
           {[1,2,3,4,5].map(n => (
             <button key={n} onClick={() => setRating(n)}
               style={{ flex: 1, height: 34, borderRadius: 6, border: "none", cursor: "pointer",
                 fontSize: 16, background: rating >= n ? "#FFB300" : C.darkBorder }}>⭐</button>
           ))}
         </div>
-        <textarea placeholder="Overall session notes..." value={notes} rows={2}
+        <textarea placeholder="Overall session notes, how you felt, what to improve..." value={notes} rows={2}
           onChange={e => setNotes(e.target.value)}
           style={{ ...setInpF, resize: "none", width: "100%", padding: "8px 10px", fontSize: 12 }} />
       </div>
 
       {error && <div style={{ color: C.danger, fontSize: 12, marginBottom: 8, textAlign: "center" }}>{error}</div>}
 
-      {saved && !showComparison ? (
-        <div style={{ background: C.success + "20", border: `1px solid ${C.success}`, borderRadius: 10, padding: 14, textAlign: "center" }}>
-          <div style={{ color: C.success, fontWeight: 700 }}>✅ Session saved!</div>
-        </div>
-      ) : (
-        <button onClick={saveSession} disabled={saving || completed === 0}
-          style={btn(completed === 0 ? C.textDim : color, {
-            width: "100%", padding: 14, fontSize: 14,
-            cursor: completed === 0 ? "not-allowed" : "pointer"
-          })}>
-          {saving ? "Saving..." : `Save Session (${completed}/${exList.length} exercises)`}
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ─── APP ──────────────────────────────────────────────────────────────────────
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [screen, setScreen] = useState("login"); // login | request_soccer | request_fitness
-
-  if (screen === "request_soccer") return <RequestAccess onBack={() => setScreen("login")} />;
-  if (screen === "request_fitness") return <FitnessRequestAccess onBack={() => setScreen("login")} />;
-  if (!user) return <Login onLogin={setUser} onRequestAccess={(type) => setScreen(type === "fitness" ? "request_fitness" : "request_soccer")} />;
-  const logout = () => { setUser(null); setScreen("login"); };
-  // Normalize role - handle object format from Airtable
-  const role = user.role?.name || user.role || "";
-  if (role === "coach") return <CoachDashboard user={{...user, role: "coach"}} onLogout={logout} />;
-  if (role === "player") return <PlayerDashboard user={{...user, role: "player"}} onLogout={logout} />;
-  if (role === "parent") return <ParentDashboard user={{...user, role: "parent"}} onLogout={logout} />;
-  if (role === "fitness_client") return <FitnessClientDashboard user={{...user, role: "fitness_client"}} onLogout={logout} />;
-  // Fallback - show what role we got so we can debug
-  return (
-    <div style={{ minHeight: "100vh", background: "#0A1628", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ textAlign: "center", color: "#F0F4FF" }}>
-        <div style={{ fontSize: 32, marginBottom: 16 }}>⚽</div>
-        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Welcome, {user.name}</div>
-        <div style={{ fontSize: 13, color: "#7A92B8", marginBottom: 4 }}>Role: {JSON.stringify(user.role)}</div>
-        <div style={{ fontSize: 11, color: "#4A6080", marginBottom: 20 }}>Contact your coach if you cannot access your dashboard.</div>
-        <button onClick={logout} style={{ background: "#2563EB", border: "none", borderRadius: 8, padding: "10px 24px", color: "#fff", fontSize: 14, cursor: "pointer" }}>
-          Sign Out
-        </button>
+      <button onClick={saveSession} disabled={saving || (!mainLog && !warmUpLog && !notes)}
+        style={btn((!mainLog && !warmUpLog && !notes) ? C.textDim : color, {
+          width: "100%", padding: 14, fontSize: 14,
+          cursor: (!mainLog && !warmUpLog && !notes) ? "not-allowed" : "pointer"
+        })}>
+        {saving ? "Saving..." : "Save Session"}
+      </button>
+      <div style={{ color: C.textDim, fontSize: 11, textAlign: "center", marginTop: 6 }}>
+        Log your warm up or main workout to save
       </div>
     </div>
   );
 }
+
+
