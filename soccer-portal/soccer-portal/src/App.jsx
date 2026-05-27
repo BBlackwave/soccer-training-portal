@@ -2381,35 +2381,20 @@ function FitnessClientDashboard({ user, onLogout }) {
           const email = Object.values(f).find(v => typeof v === "string" && v === user.email);
           return name || email;
         });
-        if (match) {
-          const f = match.fields;
-          // Get values - handle both field names and objects
-          const getVal = (v) => v?.name || v || null;
-          setClientData({
-            "Full Name": getVal(f["Full Name"]) || user.name,
-            "Athlete Type": getVal(f["Athlete Type"]) || "Hybrid Athlete",
-            "Experience Level": getVal(f["Experience Level"]) || "Beginner",
-            "Primary Goal": getVal(f["Primary Goal"]) || "General Fitness",
-            "Training Days Per Week": f["Training Days Per Week"] || 3,
-            "Session Duration min": f["Session Duration min"] || 60,
-            "Equipment Available": f["Equipment Available"] || "bodyweight only",
-            "Injury History": f["Injury History"] || "",
-            "Status": getVal(f["Status"]) || "Active",
-          });
-        } else {
-          // No match - use defaults so UI still shows
-          setClientData({
-            "Full Name": user.name,
-            "Athlete Type": "Hybrid Athlete",
-            "Experience Level": "Beginner",
-            "Primary Goal": "General Fitness",
-            "Training Days Per Week": 3,
-            "Session Duration min": 60,
-            "Equipment Available": "bodyweight only",
-            "Injury History": "",
-            "Status": "Active",
-          });
-        }
+        // Always set clientData - use match if found, defaults otherwise
+        const f = match ? match.fields : {};
+        const getVal = (v) => v?.name || (typeof v === "string" ? v : null);
+        setClientData({
+          "Full Name": getVal(f["Full Name"]) || user.name,
+          "Athlete Type": getVal(f["Athlete Type"]) || "Hybrid Athlete",
+          "Experience Level": getVal(f["Experience Level"]) || "Beginner",
+          "Primary Goal": getVal(f["Primary Goal"]) || "General Fitness",
+          "Training Days Per Week": f["Training Days Per Week"] || 3,
+          "Session Duration min": f["Session Duration min"] || 60,
+          "Equipment Available": f["Equipment Available"] || "bodyweight only",
+          "Injury History": f["Injury History"] || "none",
+          "Status": getVal(f["Status"]) || "Active",
+        });
       }
       if (plansRes?.records) {
         setPlans(plansRes.records.filter(r =>
@@ -2968,21 +2953,34 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
     const lines = mainBlock.split("\n").filter(l => l.trim());
     const exList = [];
     lines.forEach((line, i) => {
-      // Match lines that look like exercises (contain x or sets/reps pattern)
-      if (line.match(/\d+x\d+|\d+ sets|\d+ reps|\d+x /i) || 
-          (line.match(/^[-•\d]/) && line.length > 10)) {
-        const name = line.replace(/^[-•\d.]+\s*/, "").replace(/\s*[–-].*$/, "").trim();
-        if (name.length > 3) {
-          exList.push({ id: `ex-${i}`, name: name.slice(0, 60), line });
+      const trimmed = line.trim();
+      // Skip headers, empty lines, short lines
+      if (trimmed.length < 4) return;
+      if (trimmed.match(/^(warm.?up|cool.?down|main|block|note|rest|week|phase|day|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i)) return;
+      // Match exercise lines - numbered, bulleted, or containing sets/reps
+      if (
+        trimmed.match(/^[\d]+[.)]\s+\w/) ||           // "1. Exercise name"
+        trimmed.match(/^[-•*]\s+\w/) ||               // "- Exercise name"  
+        trimmed.match(/\d+\s*[xX×]\s*\d+/) ||         // "3x10" or "3 x 10"
+        trimmed.match(/\d+\s*sets?/i) ||             // "3 sets"
+        trimmed.match(/\d+\s*reps?/i) ||             // "10 reps"
+        (trimmed.length > 8 && trimmed.match(/^[A-Z]/)) // Starts with capital
+      ) {
+        const name = trimmed
+          .replace(/^[\d]+[.)]\s*/, "")
+          .replace(/^[-•*]\s*/, "")
+          .replace(/\s*[–\-:]\s*\d+.*$/, "")
+          .replace(/\s*\(\d+.*?\).*$/, "")
+          .trim();
+        if (name.length > 3 && name.length < 80) {
+          exList.push({ id: `ex-${i}`, name: name.slice(0, 70), line: trimmed });
         }
       }
     });
-    // If no exercises found, create from lines
+    // Always ensure we have exercises
     if (exList.length === 0) {
-      lines.slice(0, 8).forEach((line, i) => {
-        if (line.length > 5) {
-          exList.push({ id: `ex-${i}`, name: line.slice(0, 60), line });
-        }
+      lines.filter(l => l.trim().length > 5).slice(0, 10).forEach((line, i) => {
+        exList.push({ id: `ex-${i}`, name: line.trim().slice(0, 70), line: line.trim() });
       });
     }
     return exList.slice(0, 12);
