@@ -2960,12 +2960,27 @@ IMPORTANT: Return ONLY the raw JSON array with no markdown, no code blocks, no e
       });
 
       const data = await res.json();
-      const text = data.content?.[0]?.text || "";
       
-      // Parse the JSON
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) throw new Error("Could not parse plan from AI response");
-      const sessions = JSON.parse(jsonMatch[0]);
+      // Check for API errors
+      if (data.error) throw new Error("API: " + JSON.stringify(data.error));
+      if (!data.content || !data.content[0]) throw new Error("Empty response: " + JSON.stringify(data).slice(0, 300));
+      
+      const text = data.content[0].text || "";
+      
+      // Parse JSON - multiple strategies
+      let sessions = null;
+      try { sessions = JSON.parse(text); } catch {}
+      if (!sessions) {
+        const m = text.match(/\[[\s\S]*\]/);
+        if (m) { try { sessions = JSON.parse(m[0]); } catch {} }
+      }
+      if (!sessions) {
+        const m = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (m) { try { sessions = JSON.parse(m[1]); } catch {} }
+      }
+      if (!sessions || !Array.isArray(sessions)) {
+        throw new Error("Parse failed. Got: " + text.slice(0, 300));
+      }
 
       // Step 2 — Save each session to Airtable
       setStatus(`Saving ${sessions.length} sessions to Airtable...`);
