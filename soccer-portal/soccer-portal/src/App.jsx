@@ -2949,42 +2949,53 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
 
   // Parse exercises from plan's Main Block
   const parseExercises = (plan) => {
-    const mainBlock = plan.fields["Main Block"] || "";
-    const lines = mainBlock.split("\n").filter(l => l.trim());
+    const f = plan.fields;
+    const mainBlock = f["Main Block"] || f["Drill Details"] || f["Exercises & Sets/Reps"] || "";
     const exList = [];
-    lines.forEach((line, i) => {
-      const trimmed = line.trim();
-      // Skip headers, empty lines, short lines
-      if (trimmed.length < 4) return;
-      if (trimmed.match(/^(warm.?up|cool.?down|main|block|note|rest|week|phase|day|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i)) return;
-      // Match exercise lines - numbered, bulleted, or containing sets/reps
-      if (
-        trimmed.match(/^[\d]+[.)]\s+\w/) ||           // "1. Exercise name"
-        trimmed.match(/^[-•*]\s+\w/) ||               // "- Exercise name"  
-        trimmed.match(/\d+\s*[xX×]\s*\d+/) ||         // "3x10" or "3 x 10"
-        trimmed.match(/\d+\s*sets?/i) ||             // "3 sets"
-        trimmed.match(/\d+\s*reps?/i) ||             // "10 reps"
-        (trimmed.length > 8 && trimmed.match(/^[A-Z]/)) // Starts with capital
-      ) {
-        const name = trimmed
-          .replace(/^[\d]+[.)]\s*/, "")
-          .replace(/^[-•*]\s*/, "")
-          .replace(/\s*[–\-:]\s*\d+.*$/, "")
-          .replace(/\s*\(\d+.*?\).*$/, "")
-          .trim();
-        if (name.length > 3 && name.length < 80) {
-          exList.push({ id: `ex-${i}`, name: name.slice(0, 70), line: trimmed });
+    if (!mainBlock) return exList;
+    
+    // Split by common delimiters to get individual exercises
+    // Try splitting by numbered list first (1. 2. 3.)
+    const numbered = mainBlock.split(/(?=\d+\.\s+[A-Z])/);
+    if (numbered.length > 2) {
+      numbered.forEach((chunk, i) => {
+        const clean = chunk.replace(/^\d+\.\s*/, "").split(/(\(|,\s*rest|\. )/)[0].trim();
+        if (clean.length > 4 && clean.length < 80) {
+          exList.push({ id: `ex-${i}`, name: clean.slice(0, 70), line: chunk.trim() });
         }
+      });
+      if (exList.length > 1) return exList.slice(0, 12);
+    }
+    
+    // Try splitting by ", N " patterns (e.g. "squats (rest 60s), 3 sets of push-ups")
+    const commaNum = mainBlock.split(/,\s*(?=\d+\s+(?:sets?|rounds?|min|reps?))/i);
+    if (commaNum.length > 2) {
+      commaNum.forEach((chunk, i) => {
+        const clean = chunk.replace(/^[\d\s]+(?:sets?\s*(?:of|x)\s*[\d]+\s*)?/i, "").split(/[,(]/)[0].trim();
+        if (clean.length > 4 && clean.length < 80) {
+          exList.push({ id: `ex-${i}`, name: clean.slice(0, 70), line: chunk.trim() });
+        }
+      });
+      if (exList.length > 1) return exList.slice(0, 12);
+    }
+    
+    // Final fallback: split by sentences and use each as an exercise
+    const sentences = mainBlock.split(/\.(?=\s+[A-Z])|(?<=\))\.?\s+(?=[A-Z3])/).filter(s => s.trim().length > 8);
+    sentences.slice(0, 8).forEach((s, i) => {
+      const clean = s.trim().slice(0, 70);
+      if (clean.length > 4) {
+        exList.push({ id: `ex-${i}`, name: clean, line: clean });
       }
     });
-    // Always ensure we have exercises
-    if (exList.length === 0) {
-      lines.filter(l => l.trim().length > 5).slice(0, 10).forEach((line, i) => {
-        exList.push({ id: `ex-${i}`, name: line.trim().slice(0, 70), line: line.trim() });
-      });
+    
+    // If still nothing, just show the whole block as one item
+    if (exList.length === 0 && mainBlock.length > 0) {
+      exList.push({ id: "ex-0", name: "Main Workout Block", line: mainBlock });
     }
+    
     return exList.slice(0, 12);
   };
+
 
   const initExercises = (plan) => {
     const exList = parseExercises(plan);
