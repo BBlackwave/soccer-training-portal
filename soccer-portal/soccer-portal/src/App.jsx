@@ -2614,6 +2614,7 @@ function CoachFitnessSection({ onLogout, user }) {
     { id: "clients", label: "Clients" },
     { id: "plans", label: "Plans" },
     { id: "library", label: "Exercise Library" },
+    { id: "users", label: "Manage Users" },
   ];
 
   return (
@@ -2715,6 +2716,7 @@ function CoachFitnessSection({ onLogout, user }) {
         </div>
       )}
 
+      {tab === "users" && <ManageUsers />}
       {tab === "library" && (
         <div style={{ padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
