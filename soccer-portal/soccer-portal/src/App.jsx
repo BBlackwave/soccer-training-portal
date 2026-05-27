@@ -2584,7 +2584,6 @@ function CoachFitnessSection({ onLogout, user }) {
   const [tab, setTab] = useState("clients");
   const [selectedClientForGen, setSelectedClientForGen] = useState(null);
   const [selectedClientForLog, setSelectedClientForLog] = useState(null);
-  const [selectedClientForLog, setSelectedClientForLog] = useState(null);
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
   const [plans, setPlans] = useState([]);
@@ -2783,24 +2782,7 @@ function CoachFitnessSection({ onLogout, user }) {
           </div>
         </div>
       )}
-      {selectedClientForLog && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000CC", zIndex: 200, overflowY: "auto" }}>
-          <div style={{ maxWidth: 500, margin: "20px auto", background: C.dark, borderRadius: 16, overflow: "hidden" }}>
-            <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.darkBorder}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ color: C.text, fontWeight: 700 }}>Log Session — {selectedClientForLog.fields["Full Name"]}</span>
-              <button onClick={() => setSelectedClientForLog(null)}
-                style={{ background: C.darkBorder, border: "none", borderRadius: 6, padding: "4px 10px", color: C.text, cursor: "pointer", fontSize: 12 }}>✕ Close</button>
-            </div>
-            <FitnessSessionLogger
-              clientName={selectedClientForLog.fields["Full Name"]}
-              clientId={selectedClientForLog.id}
-              plans={plans.filter(p => (p.fields["Client Name"] || "").toLowerCase() === (selectedClientForLog.fields["Full Name"] || "").toLowerCase())}
-              athleteType={selectedClientForLog.fields["Athlete Type"] || "General Fitness"}
-              onSaved={() => { setSelectedClientForLog(null); loadData(); }}
-            />
-          </div>
-        </div>
-      )}
+      
       {selectedClientForGen && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000CC", zIndex: 200, overflowY: "auto" }}>
           <div style={{ maxWidth: 500, margin: "20px auto", background: C.dark, borderRadius: 16, overflow: "hidden" }}>
@@ -2961,11 +2943,8 @@ function FitnessSessionLogger({ clientId, clientName, onBack }) {
     const finishers = plan.fields["Finishers"] || "";
     
     // Extract exercise names from the plan text
-    const allText = warmUp + "
-" + mainBlock + "
-" + finishers;
-    const lines = allText.split("
-").filter(l => l.trim());
+    const allText = warmUp + "\n" + mainBlock + "\n" + finishers;
+    const lines = allText.split("\n").filter(l => l.trim());
     const exNames = lines
       .filter(l => l.match(/^[-•*]?\s*[A-Z][^:]+(?:\d+x\d+|\d+ sets|AMRAP)/i) || 
                    l.match(/^[-•*]\s*.+/))
