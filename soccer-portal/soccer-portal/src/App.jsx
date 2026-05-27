@@ -2944,10 +2944,19 @@ Day values must be actual days: Monday, Tuesday, Wednesday, Thursday, Friday, Sa
 Make the plan detailed, specific, and appropriate for ${experience} level. Account for equipment: ${equipment}. Avoid exercises that stress: ${injuries}.
 Return ONLY the JSON array, no other text.`;
 
-      const res = await fetch("/api/generate", {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": "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",
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 4000,
+          messages: [{ role: "user", content: prompt }],
+        }),
       });
 
       const data = await res.json();
