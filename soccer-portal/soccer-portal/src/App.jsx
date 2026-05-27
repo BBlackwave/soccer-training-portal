@@ -230,10 +230,21 @@ function RequestAccess({ onBack }) {
     const linkedPlayer = form.role !== "coach" ? form.playerName : "";
     const linkedPlayerId = PLAYERS_DATA.find(p => p.name.toLowerCase() === linkedPlayer.toLowerCase())?.id || "";
     try {
-      await callClaude(
-        `Create a record in Airtable base ${AIRTABLE_BASE_ID}, table ${USERS_TABLE_ID} with these fields: Email: "${form.email.toLowerCase()}", Name: "${form.name}", Password: "${form.password}", Role: "${form.role}", Status: "Pending", Linked Player Name: "${linkedPlayer}", Linked Player ID: "${linkedPlayerId}", Requested At: "${new Date().toISOString()}". Confirm when done.`
-      );
-      setDone(true);
+      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}`, {
+        method: "POST",
+        body: JSON.stringify({ records: [{ fields: {
+          "Name": form.name,
+          "Email": form.email.toLowerCase(),
+          "Password": form.password,
+          "Role": form.role,
+          "Status": "Pending",
+          "Linked Player Name": linkedPlayer,
+          "Linked Player ID": linkedPlayerId,
+          "Requested At": new Date().toISOString(),
+        }}]}),
+      });
+      if (res.records) { setDone(true); }
+      else { setError("Submission failed. Try again."); }
     } catch { setError("Submission failed. Try again."); }
     setLoading(false);
   };
@@ -513,12 +524,18 @@ function ManageUsers() {
   };
 
   const approveUser = async (userId) => {
-    await callClaude(`Update record ${userId} in Airtable base ${AIRTABLE_BASE_ID}, table ${USERS_TABLE_ID}. Set Status to "Active". Confirm when done.`);
+    await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}`, {
+      method: "PATCH",
+      body: JSON.stringify({ records: [{ id: userId, fields: { "Status": "Active" } }] }),
+    });
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: "Active" } : u));
   };
 
   const denyUser = async (userId) => {
-    await callClaude(`Update record ${userId} in Airtable base ${AIRTABLE_BASE_ID}, table ${USERS_TABLE_ID}. Set Status to "Denied". Confirm when done.`);
+    await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}`, {
+      method: "PATCH",
+      body: JSON.stringify({ records: [{ id: userId, fields: { "Status": "Denied" } }] }),
+    });
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: "Denied" } : u));
   };
 
@@ -526,8 +543,21 @@ function ManageUsers() {
     if (!form.name || !form.email || !form.password) { setMsg("Fill in all fields."); return; }
     setCreating(true); setMsg("");
     const linkedPlayerId = PLAYERS_DATA.find(p => p.name.toLowerCase() === form.playerName.toLowerCase())?.id || "";
-    await callClaude(`Create a record in Airtable base ${AIRTABLE_BASE_ID}, table ${USERS_TABLE_ID}. Fields: Email: "${form.email.toLowerCase()}", Name: "${form.name}", Password: "${form.password}", Role: "${form.role}", Status: "Active", Linked Player Name: "${form.playerName}", Linked Player ID: "${linkedPlayerId}", Requested At: "${new Date().toISOString()}". Confirm when done.`);
-    setMsg(`✅ Account created for ${form.name}`);
+    const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}`, {
+      method: "POST",
+      body: JSON.stringify({ records: [{ fields: {
+        "Name": form.name,
+        "Email": form.email.toLowerCase(),
+        "Password": form.password,
+        "Role": form.role,
+        "Status": "Active",
+        "Linked Player Name": form.playerName,
+        "Linked Player ID": linkedPlayerId,
+        "Requested At": new Date().toISOString(),
+      }}]}),
+    });
+    if (res.records) { setMsg(`✅ Account created for ${form.name}`); }
+    else { setMsg("Failed to create account. Try again."); }
     setForm({ name: "", email: "", password: "", role: "player", playerName: "" });
     setCreating(false); setShowForm(false);
     loadUsers();
