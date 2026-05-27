@@ -19,19 +19,25 @@ async function airtableFetch(path, options = {}) {
 }
 
 async function loginFromAirtable(email, password) {
-  const formula = encodeURIComponent(`AND({Email}="${email.trim().toLowerCase()}",{Password}="${password}",{Status}="Active")`);
+  // Use field IDs directly for reliable filtering
+  // flddeq09ZwaReoN5s = Email, fldNTTfftcn4F0GKw = Password, fldlv5CUPNcLp5MAJ = Status
+  const formula = encodeURIComponent(`AND({flddeq09ZwaReoN5s}="${email.trim().toLowerCase()}",{fldNTTfftcn4F0GKw}="${password}")`);
   const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}?filterByFormula=${formula}`);
   if (!data.records || data.records.length === 0) return null;
   const r = data.records[0];
   const f = r.fields;
+  // Check status - allow Active or no status set
+  const status = f["Status"]?.name || f["Status"] || "";
+  if (status === "Denied") return null;
   return {
     id: r.id,
     name: f["Name"] || "",
     email: f["Email"] || "",
-    role: f["Role"] || "",
+    role: f["Role"]?.name || f["Role"] || "",
     playerId: f["Linked Player ID"] || "",
     childId: f["Linked Player ID"] || "",
     childName: f["Linked Player Name"] || "",
+    clientId: f["Client ID"] || "",
   };
 }
 
@@ -233,14 +239,13 @@ function RequestAccess({ onBack }) {
       const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}`, {
         method: "POST",
         body: JSON.stringify({ records: [{ fields: {
-          "Name": form.name,
-          "Email": form.email.toLowerCase(),
-          "Password": form.password,
-          "Role": form.role,
-          "Status": "Pending",
-          "Linked Player Name": linkedPlayer,
-          "Linked Player ID": linkedPlayerId,
-          "Requested At": new Date().toISOString(),
+          "flddeq09ZwaReoN5s": form.email.toLowerCase(),
+          "fldBDjaUIWTm6PagP": form.name,
+          "fldNTTfftcn4F0GKw": form.password,
+          "fldwImKFm7Nbwa2fz": form.role,
+          "fldlv5CUPNcLp5MAJ": "Pending",
+          "flde4MGWsi1jL5M4y": linkedPlayer,
+          "fldariP3HOBd2ifw1": linkedPlayerId,
         }}]}),
       });
       if (res.records) { setDone(true); }
@@ -526,7 +531,7 @@ function ManageUsers() {
   const approveUser = async (userId) => {
     await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}`, {
       method: "PATCH",
-      body: JSON.stringify({ records: [{ id: userId, fields: { "Status": "Active" } }] }),
+      body: JSON.stringify({ records: [{ id: userId, fields: { "fldlv5CUPNcLp5MAJ": "Active" } }] }),
     });
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: "Active" } : u));
   };
@@ -534,7 +539,7 @@ function ManageUsers() {
   const denyUser = async (userId) => {
     await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}`, {
       method: "PATCH",
-      body: JSON.stringify({ records: [{ id: userId, fields: { "Status": "Denied" } }] }),
+      body: JSON.stringify({ records: [{ id: userId, fields: { "fldlv5CUPNcLp5MAJ": "Denied" } }] }),
     });
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: "Denied" } : u));
   };
@@ -546,14 +551,13 @@ function ManageUsers() {
     const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}`, {
       method: "POST",
       body: JSON.stringify({ records: [{ fields: {
-        "Name": form.name,
-        "Email": form.email.toLowerCase(),
-        "Password": form.password,
-        "Role": form.role,
-        "Status": "Active",
-        "Linked Player Name": form.playerName,
-        "Linked Player ID": linkedPlayerId,
-        "Requested At": new Date().toISOString(),
+        "flddeq09ZwaReoN5s": form.email.toLowerCase(),
+        "fldBDjaUIWTm6PagP": form.name,
+        "fldNTTfftcn4F0GKw": form.password,
+        "fldwImKFm7Nbwa2fz": form.role,
+        "fldlv5CUPNcLp5MAJ": "Active",
+        "flde4MGWsi1jL5M4y": form.playerName,
+        "fldariP3HOBd2ifw1": linkedPlayerId,
       }}]}),
     });
     if (res.records) { setMsg(`✅ Account created for ${form.name}`); }
@@ -2214,13 +2218,12 @@ function FitnessRequestAccess({ onBack }) {
       await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}`, {
         method: "POST",
         body: JSON.stringify({ records: [{ fields: {
-          "Name": form.name,
-          "Email": form.email,
-          "Password": form.password,
-          "Role": "fitness_client",
-          "Status": "Pending",
-          "Client ID": clientId || "",
-          "Requested At": new Date().toISOString(),
+          "flddeq09ZwaReoN5s": form.email.toLowerCase(),
+          "fldBDjaUIWTm6PagP": form.name,
+          "fldNTTfftcn4F0GKw": form.password,
+          "fldwImKFm7Nbwa2fz": "fitness_client",
+          "fldlv5CUPNcLp5MAJ": "Pending",
+          "fldkpu62AFEBxLWiD": clientId || "",
         }}]}),
       });
       setDone(true);
