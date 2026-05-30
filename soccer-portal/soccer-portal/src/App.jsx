@@ -835,6 +835,7 @@ function CoachDashboard({ user, onLogout }) {
         </div>
       )}
       {tab === "users" && <ManageUsers />}
+      {tab === "exlibrary" && <FitnessExerciseLibrary isCoach={true} userName="Coach" />}
     </div>
       )}
     </div>
@@ -2414,6 +2415,7 @@ function FitnessClientDashboard({ user, onLogout }) {
     { id: "overview", label: "Overview" },
     { id: "log", label: "Log Session" },
     { id: "generate", label: "Generate Plan" },
+    { id: "library", label: "Library" },
     { id: "assessment", label: "Assessment" },
     { id: "profile", label: "Profile" },
   ];
@@ -2492,6 +2494,7 @@ function FitnessClientDashboard({ user, onLogout }) {
           onDone={() => { setTab("plans"); loadData(); }}
         />
       )}
+      {tab === "library" && <FitnessExerciseLibrary isCoach={false} userName={user.name} />}
       {tab === "assessment" && (
         <div style={{ padding: 16 }}>
           <div style={{ color: C.text, fontSize: 18, fontWeight: 800, marginBottom: 4 }}>My Assessments</div>
@@ -2629,6 +2632,7 @@ function CoachFitnessSection({ onLogout, user }) {
     { id: "clients", label: "Clients" },
     { id: "plans", label: "Plans" },
     { id: "library", label: "Exercise Library" },
+    { id: "exlibrary", label: "Exercise DB" },
     { id: "users", label: "Manage Users" },
   ];
 
@@ -2750,6 +2754,7 @@ function CoachFitnessSection({ onLogout, user }) {
       )}
 
       {tab === "users" && <ManageUsers />}
+      {tab === "exlibrary" && <FitnessExerciseLibrary isCoach={true} userName="Coach" />}
       {selectedClientForLog && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000CC", zIndex: 200, overflowY: "auto" }}>
           <div style={{ maxWidth: 500, margin: "20px auto", background: C.dark, borderRadius: 16, overflow: "hidden" }}>
@@ -3415,6 +3420,225 @@ IMPORTANT: Return ONLY the raw JSON array. Start with [ and end with ]. No markd
       <div style={{ color: C.textDim, fontSize: 11, textAlign: "center", marginTop: 8 }}>
         AI generates a full {days}-day plan tailored to your profile
       </div>
+    </div>
+  );
+}
+
+
+// ─── FITNESS EXERCISE LIBRARY ─────────────────────────────────────────────────
+const FITNESS_EXERCISE_LIBRARY_TABLE_ID = "tbl5Hwmc6tqF94V2q";
+
+const MUSCLE_COLORS = {
+  "Chest": "#EF4444", "Triceps": "#F97316", "Back": "#3B82F6",
+  "Shoulders": "#8B5CF6", "Biceps": "#EAB308", "Legs": "#10B981",
+  "Core": "#14B8A6", "Cardio": "#6B7280",
+};
+
+function FitnessExerciseLibrary({ isCoach = false, userName = "" }) {
+  const [exercises, setExercises] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [selectedGroup, setSelectedGroup] = useState("All");
+  const [showAdd, setShowAdd] = useState(false);
+  const [newEx, setNewEx] = useState({
+    name: "", muscleGroup: "Chest", equipment: "Barbell",
+    sets: "", reps: "", cue: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
+
+  useEffect(() => { loadExercises(); }, []);
+
+  const loadExercises = async () => {
+    setLoading(true);
+    try {
+      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_EXERCISE_LIBRARY_TABLE_ID}?sort[0][field]=Muscle Group&sort[0][direction]=asc`);
+      if (data.records) setExercises(data.records);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const saveExercise = async () => {
+    if (!newEx.name) { setSaveMsg("Exercise name required."); return; }
+    setSaving(true); setSaveMsg("");
+    try {
+      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_EXERCISE_LIBRARY_TABLE_ID}`, {
+        method: "POST",
+        body: JSON.stringify({ records: [{ fields: {
+          "Exercise Name": newEx.name,
+          "Muscle Group": newEx.muscleGroup,
+          "Equipment": newEx.equipment,
+          "Default Sets": newEx.sets ? parseInt(newEx.sets) : null,
+          "Default Reps": newEx.reps || "",
+          "Coaching Cue": newEx.cue || "",
+          "Added By": userName || "Coach",
+          "Custom": true,
+        }}], typecast: true }),
+      });
+      if (res.records) {
+        setSaveMsg("Exercise added to library!");
+        setNewEx({ name: "", muscleGroup: "Chest", equipment: "Barbell", sets: "", reps: "", cue: "" });
+        setShowAdd(false);
+        loadExercises();
+      } else setSaveMsg("Save failed.");
+    } catch { setSaveMsg("Network error."); }
+    setSaving(false);
+  };
+
+  const groups = ["All", "Chest", "Triceps", "Back", "Shoulders", "Biceps", "Legs", "Core", "Cardio"];
+  
+  const filtered = exercises.filter(e => {
+    const name = e.fields["Exercise Name"] || "";
+    const group = e.fields["Muscle Group"] || "";
+    const matchSearch = name.toLowerCase().includes(search.toLowerCase());
+    const matchGroup = selectedGroup === "All" || group === selectedGroup;
+    return matchSearch && matchGroup;
+  });
+
+  return (
+    <div style={{ padding: "12px 14px" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div>
+          <div style={{ color: C.text, fontSize: 18, fontWeight: 800 }}>Exercise Library</div>
+          <div style={{ color: C.textMuted, fontSize: 12 }}>{exercises.length} exercises · {exercises.filter(e => e.fields["Custom"]).length} custom</div>
+        </div>
+        <button onClick={() => setShowAdd(!showAdd)}
+          style={btn("#FF6B35", { fontSize: 11, padding: "6px 14px" })}>
+          + Add Exercise
+        </button>
+      </div>
+
+      {/* Add exercise form */}
+      {showAdd && (
+        <div style={{ background: C.darkCard, border: "1px solid #FF6B3544", borderRadius: 12, padding: 16, marginBottom: 14 }}>
+          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 12, fontFamily: "monospace" }}>ADD CUSTOM EXERCISE</div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>EXERCISE NAME *</div>
+            <input value={newEx.name} onChange={e => setNewEx(p => ({ ...p, name: e.target.value }))}
+              placeholder="e.g. Close Grip Pull-Up" style={inp({ fontSize: 13 })} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div>
+              <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>MUSCLE GROUP</div>
+              <select value={newEx.muscleGroup} onChange={e => setNewEx(p => ({ ...p, muscleGroup: e.target.value }))}
+                style={{ ...inp({ fontSize: 12 }), appearance: "none" }}>
+                {["Chest", "Triceps", "Back", "Shoulders", "Biceps", "Legs", "Core", "Cardio"].map(g => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>EQUIPMENT</div>
+              <select value={newEx.equipment} onChange={e => setNewEx(p => ({ ...p, equipment: e.target.value }))}
+                style={{ ...inp({ fontSize: 12 }), appearance: "none" }}>
+                {["Barbell", "Dumbbell", "Cable", "Machine", "Bodyweight", "Kettlebell", "Resistance Band", "Landmine"].map(eq => (
+                  <option key={eq} value={eq}>{eq}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div>
+              <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>DEFAULT SETS</div>
+              <input type="number" value={newEx.sets} onChange={e => setNewEx(p => ({ ...p, sets: e.target.value }))}
+                placeholder="e.g. 3" style={inp({ fontSize: 13 })} />
+            </div>
+            <div>
+              <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>DEFAULT REPS</div>
+              <input value={newEx.reps} onChange={e => setNewEx(p => ({ ...p, reps: e.target.value }))}
+                placeholder="e.g. 10-12" style={inp({ fontSize: 13 })} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>COACHING CUE</div>
+            <textarea value={newEx.cue} onChange={e => setNewEx(p => ({ ...p, cue: e.target.value }))}
+              placeholder="Key coaching point for this exercise..." rows={2}
+              style={{ ...inp({ fontSize: 12 }), resize: "none" }} />
+          </div>
+          {saveMsg && <div style={{ color: saveMsg.includes("added") ? C.success : C.danger, fontSize: 12, marginBottom: 8 }}>{saveMsg}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={saveExercise} disabled={saving}
+              style={btn("#FF6B35", { flex: 1, padding: 11 })}>
+              {saving ? "Saving..." : "Save Exercise"}
+            </button>
+            <button onClick={() => setShowAdd(false)}
+              style={btn(C.darkBorder, { padding: "11px 16px" })}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Search */}
+      <input type="text" placeholder="Search exercises..." value={search}
+        onChange={e => setSearch(e.target.value)}
+        style={{ ...inp({ fontSize: 13 }), marginBottom: 10 }} />
+
+      {/* Muscle group filter */}
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 14, paddingBottom: 4 }}>
+        {groups.map(g => (
+          <button key={g} onClick={() => setSelectedGroup(g)}
+            style={{ padding: "5px 12px", borderRadius: 16, border: "none", cursor: "pointer",
+              fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
+              background: selectedGroup === g ? (MUSCLE_COLORS[g] || C.blue) : C.darkBorder,
+              color: selectedGroup === g ? "#fff" : C.textMuted }}>
+            {g}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
+          <div style={{ fontSize: 24, marginBottom: 8 }}>⏳</div>
+          <div>Loading library...</div>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🏋️</div>
+          <div>No exercises found.</div>
+        </div>
+      ) : (
+        <div>
+          {groups.filter(g => g !== "All").map(group => {
+            const groupEx = filtered.filter(e => e.fields["Muscle Group"] === group);
+            if (groupEx.length === 0) return null;
+            const color = MUSCLE_COLORS[group] || C.blue;
+            return (
+              <div key={group} style={{ marginBottom: 16 }}>
+                <div style={{ color, fontSize: 11, fontWeight: 700, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace", display: "flex", alignItems: "center", gap: 8 }}>
+                  {group.toUpperCase()}
+                  <span style={{ background: color + "25", borderRadius: 10, padding: "1px 8px", fontSize: 10 }}>{groupEx.length}</span>
+                </div>
+                {groupEx.map(ex => {
+                  const f = ex.fields;
+                  return (
+                    <div key={ex.id} style={{ background: C.darkCard, border: `1px solid ${f["Custom"] ? "#FF6B3344" : C.darkBorder}`,
+                      borderRadius: 10, padding: 12, marginBottom: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                            <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{f["Exercise Name"]}</span>
+                            {f["Custom"] && <span style={{ fontSize: 9, background: "#FF6B3525", color: "#FF6B35", borderRadius: 6, padding: "1px 6px", fontWeight: 700 }}>CUSTOM</span>}
+                          </div>
+                          <div style={{ color: C.textMuted, fontSize: 10, fontFamily: "monospace" }}>
+                            {f["Equipment"]} · {f["Default Sets"] ? `${f["Default Sets"]} sets × ` : ""}{f["Default Reps"] || ""}
+                          </div>
+                          {f["Coaching Cue"] && (
+                            <div style={{ color: "#FFB300", fontSize: 10, marginTop: 4, fontStyle: "italic" }}>
+                              {f["Coaching Cue"]}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
