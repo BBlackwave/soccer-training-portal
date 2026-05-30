@@ -3207,10 +3207,39 @@ function GeneratePlan({ clientData, clientId, clientName, onDone }) {
 
   const styles = PLAN_STYLES[athleteType] || PLAN_STYLES["General Fitness"];
 
-  const generatePlan = async () => {
+  const [confirmReplace, setConfirmReplace] = useState(null); // null | "checking" | "prompt"
+  const [existingPlans, setExistingPlans] = useState([]);
+
+  const checkExistingPlans = async () => {
+    if (!planStyle) { setError("Please select a plan style first."); return; }
+    setStatus("Checking existing plans...");
+    try {
+      const formula = encodeURIComponent(`{Client Name}="${clientName}"`);
+      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}?filterByFormula=${formula}`);
+      if (data.records && data.records.length > 0) {
+        setExistingPlans(data.records);
+        setConfirmReplace("prompt");
+      } else {
+        setExistingPlans([]);
+        generatePlan(false);
+      }
+    } catch {
+      generatePlan(false);
+    }
+  };
+
+  const generatePlan = async (replace = false) => {
+    setConfirmReplace(null);
     if (!planStyle) { setError("Please select a plan style first."); return; }
     setGenerating(true); setError(""); setStatus("Analyzing your profile...");
     try {
+      // Delete existing plans if replacing
+      if (replace && existingPlans.length > 0) {
+        setStatus(`Removing ${existingPlans.length} existing sessions...`);
+        for (const plan of existingPlans) {
+          await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}/${plan.id}`, { method: "DELETE" });
+        }
+      }
       setStatus("Generating your personalized plan...");
       const prompt = `You are an expert fitness coach. Generate a complete ${days}-day per week training plan for a client with the following profile:
 - Name: ${clientName}
@@ -3335,13 +3364,37 @@ IMPORTANT: Return ONLY the raw JSON array. Start with [ and end with ]. No markd
           </button>
         ))}
       </div>
-      {status && (
+      {confirmReplace === "prompt" && (
+        <div style={{ background: "#FFB30015", border: "1px solid #FFB30044", borderRadius: 12, padding: 16, marginBottom: 12 }}>
+          <div style={{ color: "#FFB300", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+            You have {existingPlans.length} existing session{existingPlans.length !== 1 ? "s" : ""}
+          </div>
+          <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 14 }}>
+            Do you want to replace your current plan or add the new sessions alongside it?
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => generatePlan(true)}
+              style={btn("#EF4444", { flex: 1, padding: 10, fontSize: 12 })}>
+              Replace Old Plan
+            </button>
+            <button onClick={() => generatePlan(false)}
+              style={btn(info.color, { flex: 1, padding: 10, fontSize: 12 })}>
+              Add New Sessions
+            </button>
+          </div>
+          <button onClick={() => { setConfirmReplace(null); setStatus(""); }}
+            style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {status && !confirmReplace && (
         <div style={{ background: info.color + "15", border: `1px solid ${info.color}44`, borderRadius: 8, padding: 12, marginBottom: 12, textAlign: "center" }}>
           <div style={{ color: info.color, fontSize: 13, fontWeight: 600 }}>{status}</div>
         </div>
       )}
       {error && <div style={{ color: C.danger, fontSize: 12, marginBottom: 12, textAlign: "center" }}>{error}</div>}
-      <button onClick={generatePlan} disabled={generating || !planStyle}
+      <button onClick={checkExistingPlans} disabled={generating || !planStyle || confirmReplace === "prompt"}
         style={btn(planStyle && !generating ? info.color : C.textDim, { width: "100%", padding: 16, fontSize: 15, fontWeight: 800, cursor: planStyle && !generating ? "pointer" : "not-allowed" })}>
         {generating ? status || "Generating..." : "✦ Generate Plan For Me"}
       </button>
