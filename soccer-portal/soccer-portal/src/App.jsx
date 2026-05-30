@@ -2412,7 +2412,6 @@ function FitnessClientDashboard({ user, onLogout }) {
 
   const tabs = [
     { id: "overview", label: "Overview" },
-    { id: "plans", label: "My Plan" },
     { id: "log", label: "Log Session" },
     { id: "generate", label: "Generate Plan" },
     { id: "assessment", label: "Assessment" },
@@ -2466,52 +2465,7 @@ function FitnessClientDashboard({ user, onLogout }) {
         </div>
       )}
 
-      {tab === "plans" && (
-        <div style={{ padding: 16 }}>
-          {loading ? (
-            <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>Loading plans...</div>
-          ) : selectedPlan ? (
-            <div>
-              <button onClick={() => setSelectedPlan(null)}
-                style={{ background: C.darkBorder, border: "none", borderRadius: 8, padding: "6px 14px", color: C.text, fontSize: 12, cursor: "pointer", marginBottom: 14 }}>
-                Back
-              </button>
-              {["Warm Up", "Main Block", "Finishers", "Cool Down"].map(section => {
-                const val = selectedPlan.fields[section];
-                if (!val) return null;
-                const sectionColors = { "Warm Up": "#FFB300", "Main Block": color, "Finishers": "#EF4444", "Cool Down": "#64B5F6" };
-                return (
-                  <div key={section} style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
-                    <div style={{ color: sectionColors[section], fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>{section.toUpperCase()}</div>
-                    <pre style={{ color: C.text, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap", margin: 0, fontFamily: "'DM Mono', monospace" }}>{val}</pre>
-                  </div>
-                );
-              })}
-            </div>
-          ) : plans.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
-              <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
-              <div>No training plans assigned yet.</div>
-              <div style={{ fontSize: 12, marginTop: 8 }}>Your coach will assign your plan soon.</div>
-            </div>
-          ) : (
-            plans.map(plan => (
-              <div key={plan.id} onClick={() => setSelectedPlan(plan)}
-                style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 16, marginBottom: 10, cursor: "pointer", borderLeft: `4px solid ${color}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div>
-                    <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>{plan.fields["Plan Name"]}</div>
-                    <div style={{ color: C.textMuted, fontSize: 11, marginTop: 3 }}>
-                      {plan.fields["Day"]} · {plan.fields["Focus"]} · {plan.fields["Duration min"]} min
-                    </div>
-                  </div>
-                  <span style={{ color: "#AAA", fontSize: 18 }}>›</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+
 
       {tab === "log" && (
         <FitnessSessionLogger
