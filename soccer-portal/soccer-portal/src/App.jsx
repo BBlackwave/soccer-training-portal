@@ -3047,17 +3047,31 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
       ) : plans.map(plan => {
         const f = plan.fields;
         return (
-          <div key={plan.id} onClick={() => selectPlan(plan)}
+          <div key={plan.id}
             style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12,
-              padding: 16, marginBottom: 10, cursor: "pointer", borderLeft: `4px solid ${color}` }}>
+              padding: 16, marginBottom: 10, borderLeft: `4px solid ${color}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
+              <div style={{ flex: 1, cursor: "pointer" }} onClick={() => selectPlan(plan)}>
                 <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>{f["Plan Name"]}</div>
                 <div style={{ color: C.textMuted, fontSize: 11, marginTop: 2 }}>
                   {f["Day"]?.name || f["Day"]} · {f["Focus"]?.name || f["Focus"]} · {f["Duration min"]} min
                 </div>
               </div>
-              <span style={{ color: "#AAA", fontSize: 18 }}>›</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!window.confirm(`Remove "${f["Plan Name"]}"?`)) return;
+                  try {
+                    await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}/${plan.id}`, { method: "DELETE" });
+                    if (onSaved) onSaved();
+                  } catch(err) { alert("Remove failed: " + err.message); }
+                }}
+                  style={{ background: "#EF444420", border: "1px solid #EF444444", borderRadius: 6,
+                    padding: "4px 10px", color: "#EF4444", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
+                  Remove
+                </button>
+                <span style={{ color: "#AAA", fontSize: 18, cursor: "pointer" }} onClick={() => selectPlan(plan)}>›</span>
+              </div>
             </div>
           </div>
         );
