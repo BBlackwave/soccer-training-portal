@@ -2903,16 +2903,12 @@ const setInpF = {
 function parseExercisesFromPlan(mainBlock) {
   if (!mainBlock) return [];
   const exercises = [];
-  
-  // Strategy 1: "N sets of N exercise_name" pattern
-  const s1 = mainBlock.matchAll(/\d+\s+sets?\s+(?:of\s+)?(?:\d+\w?\s+)?(.+?)(?:\s*\(|\s*,\s*\d+\s+sets?|\s*\.\s+[A-Z]|$)/gi);
+  const s1 = [...mainBlock.matchAll(/\d+\s+sets?\s+(?:of\s+)?(?:\d+\w?\s+)?(.+?)(?:\s*\(|\s*,\s*\d+\s+sets?|\s*\.\s+[A-Z]|$)/gi)];
   for (const m of s1) {
-    const name = m[1].trim().replace(/,\s*$/, "").replace(/each\s+leg$/i, "each leg");
+    const name = m[1].trim().replace(/,\s*$/, "");
     if (name.length > 3 && name.length < 65) exercises.push(name);
   }
   if (exercises.length >= 2) return exercises.slice(0, 12);
-
-  // Strategy 2: comma-separated numbered items in circuit format
   const parts = mainBlock.split(",").map(p => p.trim());
   for (const part of parts) {
     let clean = part.replace(/^\d+\w?\s+/, "").replace(/\s*\(.*?\)/g, "").replace(/\s*-.*$/, "").replace(/\.$/, "").trim();
@@ -2921,24 +2917,86 @@ function parseExercisesFromPlan(mainBlock) {
     }
   }
   if (exercises.length >= 2) return exercises.slice(0, 12);
-
-  // Strategy 3: extract any phrase containing exercise keywords
-  const keywords = ["squat","push.up","lunge","bridge","plank","crunch","deadlift","press","row","curl","jog","run","jump","burpee","crawl","climber","raise","hold","stretch"];
-  const kRegex = new RegExp(`(?:[\\d]+\\s+)?([a-zA-Z][a-zA-Z\\s-]{2,40}?(?:${keywords.join("|")})[a-zA-Z\\s]{0,20})`, "gi");
-  const found = new Set();
-  for (const m of mainBlock.matchAll(kRegex)) {
-    const name = m[1].trim();
-    if (name.length > 4 && !found.has(name.toLowerCase())) {
-      found.add(name.toLowerCase());
-      exercises.push(name);
-    }
-  }
+  const sentences = mainBlock.split(".").filter(s => s.trim().length > 8);
+  sentences.slice(0, 6).forEach(s => { const c = s.trim().slice(0, 65); if (c.length > 4) exercises.push(c); });
   return exercises.slice(0, 12);
 }
 
+// Library picker modal
+function ExercisePickerModal({ onSelect, onClose, existingNames = [] }) {
+  const [library, setLibrary] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [group, setGroup] = useState("All");
+
+  useEffect(() => {
+    airtableFetch(`${AIRTABLE_BASE_ID}/tbl5Hwmc6tqF94V2q?sort[0][field]=Muscle Group`)
+      .then(d => { if (d.records) setLibrary(d.records); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const groups = ["All","Chest","Triceps","Back","Shoulders","Biceps","Legs","Core","Cardio"];
+  const filtered = library.filter(e => {
+    const name = e.fields["Exercise Name"] || "";
+    const g = e.fields["Muscle Group"] || "";
+    return (group === "All" || g === group) && name.toLowerCase().includes(search.toLowerCase());
+  });
+
+  return (
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000CC", zIndex: 300, display: "flex", flexDirection: "column" }}>
+      <div style={{ background: C.dark, flex: 1, overflowY: "auto", maxWidth: 500, margin: "0 auto", width: "100%" }}>
+        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${C.darkBorder}`, display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: C.dark, zIndex: 1 }}>
+          <span style={{ color: C.text, fontWeight: 700, fontSize: 15 }}>Add Exercise</span>
+          <button onClick={onClose} style={{ background: C.darkBorder, border: "none", borderRadius: 6, padding: "4px 10px", color: C.text, cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ padding: "10px 16px 0" }}>
+          <input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
+            style={{ ...inp({ fontSize: 13 }), marginBottom: 10 }} />
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8 }}>
+            {groups.map(g => (
+              <button key={g} onClick={() => setGroup(g)}
+                style={{ padding: "4px 10px", borderRadius: 12, border: "none", cursor: "pointer",
+                  fontSize: 10, fontWeight: 700, whiteSpace: "nowrap",
+                  background: group === g ? (MUSCLE_COLORS[g] || C.blue) : C.darkBorder,
+                  color: group === g ? "#fff" : C.textMuted }}>
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ padding: "0 16px 16px" }}>
+          {loading ? <div style={{ textAlign: "center", padding: 30, color: C.textMuted }}>Loading...</div>
+            : filtered.map(ex => {
+              const f = ex.fields;
+              const name = f["Exercise Name"] || "";
+              const already = existingNames.includes(name);
+              return (
+                <div key={ex.id} onClick={() => !already && onSelect(ex)}
+                  style={{ background: C.darkCard, border: `1px solid ${already ? C.success + "44" : C.darkBorder}`,
+                    borderRadius: 10, padding: 12, marginBottom: 6,
+                    cursor: already ? "default" : "pointer", opacity: already ? 0.7 : 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{name}</div>
+                      <div style={{ color: C.textMuted, fontSize: 10, marginTop: 2 }}>
+                        {f["Muscle Group"]} · {f["Equipment"]} · {f["Default Sets"] ? `${f["Default Sets"]}×` : ""}{f["Default Reps"] || ""}
+                      </div>
+                    </div>
+                    <span style={{ color: already ? C.success : "#AAA", fontSize: 18 }}>{already ? "✓" : "+"}</span>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSaved }) {
+  const [mode, setMode] = useState("select"); // select | log | custom
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const [exList, setExList] = useState([]);
+  const [exList, setExList] = useState([]); // [{id, name, defaultSets, defaultReps}]
   const [logs, setLogs] = useState({});
   const [rating, setRating] = useState(0);
   const [notes, setNotes] = useState("");
@@ -2946,28 +3004,43 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [prevSession, setPrevSession] = useState(null);
-  const [view, setView] = useState("exercises"); // exercises | plan
+  const [showPicker, setShowPicker] = useState(false);
+  const [planView, setPlanView] = useState(false);
+  // Custom session
+  const [customName, setCustomName] = useState("");
+  const [customFocus, setCustomFocus] = useState("Strength");
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
 
   const info = ATHLETE_COLORS[athleteType] || ATHLETE_COLORS["General Fitness"];
   const color = info.color;
 
+  const addExercise = (ex) => {
+    const f = ex.fields;
+    const name = f["Exercise Name"] || "";
+    const id = `ex-${Date.now()}-${Math.random()}`;
+    setExList(prev => [...prev, { id, name, defaultSets: f["Default Sets"] || 3, defaultReps: f["Default Reps"] || "" }]);
+    setLogs(prev => ({
+      ...prev,
+      [id]: [{ reps: f["Default Reps"] || "", weight: "", note: "" }],
+    }));
+  };
+
+  const removeExercise = (id) => {
+    setExList(prev => prev.filter(e => e.id !== id));
+    setLogs(prev => { const n = { ...prev }; delete n[id]; return n; });
+  };
+
   const selectPlan = async (plan) => {
     const f = plan.fields;
-    const mainBlock = f["Main Block"] || "";
-    const parsed = parseExercisesFromPlan(mainBlock);
-    
-    // Always have something to log
-    const finalList = parsed.length > 0 ? parsed : 
-      mainBlock.split(".").filter(s => s.trim().length > 5).slice(0, 6).map(s => s.trim());
-    
+    const parsed = parseExercisesFromPlan(f["Main Block"] || "");
+    const list = parsed.map((name, i) => ({ id: `ex-plan-${i}`, name, defaultSets: 3, defaultReps: "" }));
     setSelectedPlan(plan);
-    setExList(finalList);
+    setExList(list);
     const initLogs = {};
-    finalList.forEach((ex, i) => {
-      initLogs[`ex-${i}`] = [{ reps: "", weight: "", note: "" }];
-    });
+    list.forEach(ex => { initLogs[ex.id] = [{ reps: "", weight: "", note: "" }]; });
     setLogs(initLogs);
-    setSaved(false); setPrevSession(null); setNotes(""); setRating(0);
+    setMode("log"); setSaved(false); setPrevSession(null); setNotes(""); setRating(0);
     try {
       const formula = encodeURIComponent(`AND({Client Name}="${clientName}",{Plan Name}="${f["Plan Name"]}")`);
       const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_SESSIONS_TABLE_ID}?filterByFormula=${formula}&sort[0][field]=Session Date&sort[0][direction]=desc&maxRecords=1`);
@@ -2975,48 +3048,55 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
     } catch {}
   };
 
-  const updateSet = (exIdx, setIdx, field, value) => {
-    const key = `ex-${exIdx}`;
+  const updateSet = (exId, setIdx, field, value) => {
     setLogs(prev => {
-      const sets = [...(prev[key] || [])];
+      const sets = [...(prev[exId] || [])];
       sets[setIdx] = { ...sets[setIdx], [field]: value };
-      return { ...prev, [key]: sets };
+      return { ...prev, [exId]: sets };
     });
   };
 
-  const addSet = (exIdx) => {
-    const key = `ex-${exIdx}`;
-    setLogs(prev => ({ ...prev, [key]: [...(prev[key] || []), { reps: "", weight: "", note: "" }] }));
+  const addSet = (exId) => {
+    setLogs(prev => ({ ...prev, [exId]: [...(prev[exId] || []), { reps: "", weight: "", note: "" }] }));
   };
 
-  const completed = exList.filter((_, i) => (logs[`ex-${i}`] || []).some(s => s.reps !== "")).length;
+  const buildLogText = () => {
+    const lines = [];
+    exList.forEach(ex => {
+      const sets = (logs[ex.id] || []).filter(s => s.reps);
+      if (sets.length > 0) {
+        const setStr = sets.map((s, si) =>
+          `  Set ${si+1}: ${s.reps} reps${s.weight ? " @ " + s.weight : ""}${s.note ? " — " + s.note : ""}`
+        ).join("
+");
+        lines.push(`${ex.name}:
+${setStr}`);
+      }
+    });
+    return lines.join("
+
+");
+  };
+
+  const completed = exList.filter(ex => (logs[ex.id] || []).some(s => s.reps !== "")).length;
 
   const saveSession = async () => {
     setSaving(true); setError("");
     const today = new Date().toISOString().split("T")[0];
-    const logLines = [];
-    exList.forEach((ex, i) => {
-      const sets = (logs[`ex-${i}`] || []).filter(s => s.reps);
-      if (sets.length > 0) {
-        const setStr = sets.map((s, si) =>
-          `  Set ${si+1}: ${s.reps} reps${s.weight ? " @ " + s.weight : ""}${s.note ? " — " + s.note : ""}`
-        ).join("\n");
-        logLines.push(`${ex}:\n${setStr}`);
-      }
-    });
+    const planName = mode === "custom" ? (customName || "Custom Session") : (selectedPlan?.fields["Plan Name"] || "Session");
     try {
       const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_SESSIONS_TABLE_ID}`, {
         method: "POST",
         body: JSON.stringify({ records: [{ fields: {
-          "Session Title": `${clientName} — ${selectedPlan?.fields["Plan Name"]} — ${today}`,
+          "Session Title": `${clientName} — ${planName} — ${today}`,
           "Client Name": clientName,
           "Client ID": clientId || "",
-          "Plan Name": selectedPlan?.fields["Plan Name"] || "",
+          "Plan Name": planName,
           "Session Date": today,
           "Athlete Type": athleteType,
-          "Focus": selectedPlan?.fields["Focus"]?.name || selectedPlan?.fields["Focus"] || "",
+          "Focus": mode === "custom" ? customFocus : (selectedPlan?.fields["Focus"]?.name || selectedPlan?.fields["Focus"] || ""),
           "Duration min": selectedPlan?.fields["Duration min"] || 60,
-          "Exercises Logged": logLines.join("\n\n"),
+          "Exercises Logged": buildLogText(),
           "Overall Notes": notes,
           "Rating": rating || null,
           "Logged By": clientName,
@@ -3028,33 +3108,123 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
     setSaving(false);
   };
 
+  const saveAsReusablePlan = async () => {
+    if (!customName) { setSaveMsg("Please enter a session name first."); return; }
+    setSavingPlan(true); setSaveMsg("");
+    const mainBlock = exList.map(ex => {
+      const s = logs[ex.id]?.[0];
+      return `${ex.defaultSets || 3} sets of ${s?.reps || ex.defaultReps || "10"} ${ex.name}`;
+    }).join(", ");
+    try {
+      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}`, {
+        method: "POST",
+        body: JSON.stringify({ records: [{ fields: {
+          "Plan Name": customName,
+          "Client Name": clientName,
+          "Athlete Type": athleteType,
+          "Phase": "Phase 1",
+          "Focus": customFocus,
+          "Duration min": 60,
+          "Main Block": mainBlock,
+          "Status": "Active",
+        }}], typecast: true }),
+      });
+      if (res.records) { setSaveMsg("Saved as reusable plan!"); if (onSaved) onSaved(); }
+      else setSaveMsg("Save failed.");
+    } catch { setSaveMsg("Network error."); }
+    setSavingPlan(false);
+  };
+
+  // Exercise log card (shared between plan and custom modes)
+  const ExCard = ({ ex }) => {
+    const sets = logs[ex.id] || [{ reps: ex.defaultReps || "", weight: "", note: "" }];
+    const done = sets.some(s => s.reps !== "");
+    return (
+      <div style={{ background: C.darkCard, border: `1px solid ${done ? color : C.darkBorder}`, borderRadius: 10, padding: 12, marginBottom: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: done ? color : C.textDim, flexShrink: 0 }} />
+            <span style={{ color: C.text, fontSize: 13, fontWeight: 600, textTransform: "capitalize" }}>{ex.name}</span>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => addSet(ex.id)}
+              style={{ background: color + "25", border: `1px solid ${color}44`, borderRadius: 6, padding: "3px 8px", color, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>
+              + Set
+            </button>
+            <button onClick={() => removeExercise(ex.id)}
+              style={{ background: "#EF444420", border: "1px solid #EF444433", borderRadius: 6, padding: "3px 6px", color: "#EF4444", fontSize: 10, cursor: "pointer" }}>
+              ✕
+            </button>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 2fr", gap: 4, marginBottom: 4 }}>
+          <span /><span style={{ fontSize: 9, color: C.textDim }}>REPS</span><span style={{ fontSize: 9, color: C.textDim }}>WEIGHT</span><span style={{ fontSize: 9, color: C.textDim }}>NOTE</span>
+        </div>
+        {sets.map((s, si) => (
+          <div key={si} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 2fr", gap: 4, marginBottom: 4 }}>
+            <span style={{ fontSize: 9, color: C.textDim, textAlign: "center", lineHeight: "26px" }}>S{si+1}</span>
+            <input style={setInpF} placeholder="Reps" value={s.reps} onChange={e => updateSet(ex.id, si, "reps", e.target.value)} />
+            <input style={setInpF} placeholder="Wt/Time" value={s.weight} onChange={e => updateSet(ex.id, si, "weight", e.target.value)} />
+            <input style={setInpF} placeholder="Note" value={s.note} onChange={e => updateSet(ex.id, si, "note", e.target.value)} />
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Rating + notes block
+  const RatingBlock = () => (
+    <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+      <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>SESSION RATING</div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+        {[1,2,3,4,5].map(n => (
+          <button key={n} onClick={() => setRating(n)}
+            style={{ flex: 1, height: 34, borderRadius: 6, border: "none", cursor: "pointer", fontSize: 16, background: rating >= n ? "#FFB300" : C.darkBorder }}>⭐</button>
+        ))}
+      </div>
+      <textarea placeholder="Session notes..." value={notes} rows={2} onChange={e => setNotes(e.target.value)}
+        style={{ ...setInpF, resize: "none", width: "100%", padding: "8px 10px", fontSize: 12 }} />
+    </div>
+  );
+
+  // ─── SAVED SCREEN ───
   if (saved) return (
     <div style={{ padding: 16 }}>
       <div style={{ background: C.success + "20", border: `1px solid ${C.success}`, borderRadius: 12, padding: 20, textAlign: "center", marginBottom: 16 }}>
         <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
-        <div style={{ color: C.success, fontWeight: 800, fontSize: 16 }}>Session Saved!</div>
-        {prevSession && <div style={{ color: C.textMuted, fontSize: 12, marginTop: 6 }}>Previous session: {prevSession.fields["Session Date"]}</div>}
+        <div style={{ color: C.success, fontWeight: 800, fontSize: 16 }}>Session Logged!</div>
+        {prevSession && <div style={{ color: C.textMuted, fontSize: 12, marginTop: 6 }}>Previous: {prevSession.fields["Session Date"]}</div>}
       </div>
-      <button onClick={() => { setSelectedPlan(null); setExList([]); setSaved(false); }}
+      <button onClick={() => { setMode("select"); setSelectedPlan(null); setExList([]); setSaved(false); setRating(0); setNotes(""); }}
         style={btn(color, { width: "100%", padding: 12 })}>Log Another Session</button>
     </div>
   );
 
-  if (!selectedPlan) return (
+  // ─── SELECT SCREEN ───
+  if (mode === "select") return (
     <div style={{ padding: 16 }}>
       <div style={{ color: C.text, fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Log Session</div>
-      <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 16 }}>Select today's workout</div>
+      <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 16 }}>Pick a plan or build your own</div>
+
+      {/* Build custom button */}
+      <div onClick={() => { setMode("custom"); setExList([]); setLogs({}); setCustomName(""); setSaveMsg(""); }}
+        style={{ background: color + "15", border: `2px dashed ${color}44`, borderRadius: 12,
+          padding: 16, marginBottom: 14, cursor: "pointer", textAlign: "center" }}>
+        <div style={{ color: color, fontSize: 18, marginBottom: 4 }}>🏋️</div>
+        <div style={{ color: color, fontWeight: 700, fontSize: 14 }}>Build My Own Session</div>
+        <div style={{ color: C.textMuted, fontSize: 11, marginTop: 2 }}>Pick exercises from library</div>
+      </div>
+
+      {/* Plan list */}
       {!plans || plans.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
-          <div>No plans yet. Generate a plan first.</div>
+        <div style={{ textAlign: "center", padding: 30, color: C.textMuted }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>📋</div>
+          <div>No plans yet. Generate a plan or build your own above.</div>
         </div>
       ) : plans.map(plan => {
         const f = plan.fields;
         return (
-          <div key={plan.id}
-            style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12,
-              padding: 16, marginBottom: 10, borderLeft: `4px solid ${color}` }}>
+          <div key={plan.id} style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 16, marginBottom: 8, borderLeft: `4px solid ${color}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ flex: 1, cursor: "pointer" }} onClick={() => selectPlan(plan)}>
                 <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>{f["Plan Name"]}</div>
@@ -3069,9 +3239,9 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
                   try {
                     await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}/${plan.id}`, { method: "DELETE" });
                     if (onSaved) onSaved();
-                  } catch(err) { alert("Remove failed: " + err.message); }
+                  } catch {}
                 }}
-                  style={{ background: "#EF444420", border: "1px solid #EF444444", borderRadius: 6,
+                  style={{ background: "#EF444420", border: "1px solid #EF444433", borderRadius: 6,
                     padding: "4px 10px", color: "#EF4444", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
                   Remove
                 </button>
@@ -3084,52 +3254,131 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
     </div>
   );
 
-  const f = selectedPlan.fields;
+  // ─── CUSTOM SESSION BUILDER ───
+  if (mode === "custom") return (
+    <div style={{ padding: 16 }}>
+      {showPicker && (
+        <ExercisePickerModal
+          onSelect={(ex) => { addExercise(ex); }}
+          onClose={() => setShowPicker(false)}
+          existingNames={exList.map(e => e.name)}
+        />
+      )}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14 }}>
+        <button onClick={() => setMode("select")}
+          style={{ background: C.darkBorder, border: "none", borderRadius: 6, padding: "5px 10px", color: C.text, cursor: "pointer", fontSize: 12 }}>← Back</button>
+        <div style={{ color: C.text, fontSize: 15, fontWeight: 800 }}>Build Custom Session</div>
+      </div>
+
+      {/* Session name + focus */}
+      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 5, fontFamily: "monospace" }}>SESSION NAME</div>
+          <input value={customName} onChange={e => setCustomName(e.target.value)}
+            placeholder="e.g. My Chest & Triceps Day"
+            style={inp({ fontSize: 13 })} />
+        </div>
+        <div>
+          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>FOCUS</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {["Strength", "Cardio", "Combined", "Recovery"].map(f => (
+              <button key={f} onClick={() => setCustomFocus(f)}
+                style={{ padding: "5px 12px", borderRadius: 16, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                  background: customFocus === f ? color : C.darkBorder,
+                  color: customFocus === f ? "#fff" : C.textMuted }}>
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Exercise list */}
+      {exList.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 30, background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>🏋️</div>
+          <div style={{ color: C.textMuted, fontSize: 13 }}>No exercises yet</div>
+          <div style={{ color: C.textDim, fontSize: 11, marginTop: 4 }}>Tap below to add from the library</div>
+        </div>
+      ) : (
+        exList.map(ex => <ExCard key={ex.id} ex={ex} />)
+      )}
+
+      {/* Add exercise button */}
+      <button onClick={() => setShowPicker(true)}
+        style={{ ...btn(color, { width: "100%", padding: 12, marginBottom: 12 }), background: color + "20", color, border: `1px dashed ${color}` }}>
+        + Add Exercise from Library
+      </button>
+
+      <RatingBlock />
+
+      {saveMsg && <div style={{ color: saveMsg.includes("Saved") ? C.success : C.danger, fontSize: 12, marginBottom: 8, textAlign: "center" }}>{saveMsg}</div>}
+      {error && <div style={{ color: C.danger, fontSize: 12, marginBottom: 8, textAlign: "center" }}>{error}</div>}
+
+      {/* Save options */}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={saveAsReusablePlan} disabled={savingPlan || exList.length === 0}
+          style={btn(C.blue, { flex: 1, padding: 12, fontSize: 12, cursor: exList.length === 0 ? "not-allowed" : "pointer" })}>
+          {savingPlan ? "Saving..." : "Save as Plan"}
+        </button>
+        <button onClick={saveSession} disabled={saving || completed === 0}
+          style={btn(color, { flex: 1, padding: 12, fontSize: 12, cursor: completed === 0 ? "not-allowed" : "pointer" })}>
+          {saving ? "Saving..." : "Log Session"}
+        </button>
+      </div>
+      <div style={{ color: C.textDim, fontSize: 10, textAlign: "center", marginTop: 6 }}>
+        Save as Plan = reusable template · Log Session = one-time record
+      </div>
+    </div>
+  );
+
+  // ─── PLAN LOG SCREEN ───
+  const f = selectedPlan?.fields || {};
   return (
     <div style={{ padding: 16 }}>
+      {showPicker && (
+        <ExercisePickerModal
+          onSelect={(ex) => { addExercise(ex); setShowPicker(false); }}
+          onClose={() => setShowPicker(false)}
+          existingNames={exList.map(e => e.name)}
+        />
+      )}
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button onClick={() => setSelectedPlan(null)}
+          <button onClick={() => setMode("select")}
             style={{ background: C.darkBorder, border: "none", borderRadius: 6, padding: "5px 10px", color: C.text, cursor: "pointer", fontSize: 12 }}>← Back</button>
           <div>
             <div style={{ color: C.text, fontSize: 13, fontWeight: 700 }}>{f["Plan Name"]}</div>
             <div style={{ color: C.textMuted, fontSize: 10 }}>{f["Day"]?.name || f["Day"]} · {f["Focus"]?.name || f["Focus"]}</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 4 }}>
-          {["exercises", "plan"].map(v => (
-            <button key={v} onClick={() => setView(v)}
-              style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer",
-                background: view === v ? color : C.darkBorder, color: view === v ? "#fff" : C.textMuted, fontWeight: 700 }}>
-              {v === "exercises" ? "Log" : "Plan"}
-            </button>
-          ))}
-        </div>
+        <button onClick={() => setPlanView(!planView)}
+          style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer",
+            background: planView ? color : C.darkBorder, color: planView ? "#fff" : C.textMuted, fontWeight: 700 }}>
+          {planView ? "Log" : "Plan"}
+        </button>
       </div>
 
-      {view === "plan" ? (
-        // Show full plan text
+      {planView ? (
         <div>
           {["Warm Up", "Main Block", "Finishers", "Cool Down"].map(section => {
-            const val = f[section];
-            if (!val) return null;
-            const sColors = { "Warm Up": "#FFB300", "Main Block": color, "Finishers": "#EF4444", "Cool Down": "#64B5F6" };
+            const val = f[section]; if (!val) return null;
+            const sc = { "Warm Up": "#FFB300", "Main Block": color, "Finishers": "#EF4444", "Cool Down": "#64B5F6" };
             return (
               <div key={section} style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
-                <div style={{ color: sColors[section], fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>{section.toUpperCase()}</div>
+                <div style={{ color: sc[section], fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>{section.toUpperCase()}</div>
                 <div style={{ color: C.text, fontSize: 12, lineHeight: 1.6 }}>{val}</div>
               </div>
             );
           })}
         </div>
       ) : (
-        // Exercise logging view
         <div>
-          {/* Progress bar */}
+          {/* Progress */}
           <div style={{ background: color + "15", border: `1px solid ${color}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ color: C.text, fontSize: 12 }}>{completed}/{exList.length} exercises logged</span>
+              <span style={{ color: C.text, fontSize: 12 }}>{completed}/{exList.length} logged</span>
               <span style={{ color: color, fontWeight: 800, fontFamily: "monospace" }}>{exList.length > 0 ? Math.round((completed/exList.length)*100) : 0}%</span>
             </div>
             <div style={{ background: C.darkBorder, borderRadius: 4, height: 5 }}>
@@ -3143,283 +3392,24 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
             </div>
           )}
 
-          {/* Exercise cards */}
-          {exList.map((ex, exIdx) => {
-            const key = `ex-${exIdx}`;
-            const sets = logs[key] || [{ reps: "", weight: "", note: "" }];
-            const done = sets.some(s => s.reps !== "");
-            return (
-              <div key={key} style={{ background: C.darkCard, border: `1px solid ${done ? color : C.darkBorder}`, borderRadius: 10, padding: 12, marginBottom: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: done ? color : C.textDim, flexShrink: 0 }} />
-                    <span style={{ color: C.text, fontSize: 13, fontWeight: 600, textTransform: "capitalize" }}>{ex}</span>
-                  </div>
-                  <button onClick={() => addSet(exIdx)}
-                    style={{ background: color + "25", border: `1px solid ${color}44`, borderRadius: 6, padding: "3px 8px", color, fontSize: 10, cursor: "pointer", fontWeight: 700 }}>
-                    + Set
-                  </button>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 2fr", gap: 4, marginBottom: 4 }}>
-                  <span /><span style={{ fontSize: 9, color: C.textDim }}>REPS</span><span style={{ fontSize: 9, color: C.textDim }}>WEIGHT</span><span style={{ fontSize: 9, color: C.textDim }}>NOTE</span>
-                </div>
-                {sets.map((s, si) => (
-                  <div key={si} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 2fr", gap: 4, marginBottom: 4 }}>
-                    <span style={{ fontSize: 9, color: C.textDim, textAlign: "center", lineHeight: "26px" }}>S{si+1}</span>
-                    <input style={setInpF} placeholder="Reps" value={s.reps} onChange={e => updateSet(exIdx, si, "reps", e.target.value)} />
-                    <input style={setInpF} placeholder="Wt/Time" value={s.weight} onChange={e => updateSet(exIdx, si, "weight", e.target.value)} />
-                    <input style={setInpF} placeholder="Note" value={s.note} onChange={e => updateSet(exIdx, si, "note", e.target.value)} />
-                  </div>
-                ))}
-              </div>
-            );
-          })}
+          {exList.map(ex => <ExCard key={ex.id} ex={ex} />)}
 
-          {/* Rating */}
-          <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
-            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>SESSION RATING</div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-              {[1,2,3,4,5].map(n => (
-                <button key={n} onClick={() => setRating(n)}
-                  style={{ flex: 1, height: 34, borderRadius: 6, border: "none", cursor: "pointer", fontSize: 16, background: rating >= n ? "#FFB300" : C.darkBorder }}>⭐</button>
-              ))}
-            </div>
-            <textarea placeholder="Session notes..." value={notes} rows={2} onChange={e => setNotes(e.target.value)}
-              style={{ ...setInpF, resize: "none", width: "100%", padding: "8px 10px", fontSize: 12 }} />
-          </div>
+          {/* Add from library */}
+          <button onClick={() => setShowPicker(true)}
+            style={{ width: "100%", padding: 10, borderRadius: 10, marginBottom: 12,
+              background: color + "15", border: `1px dashed ${color}44`, color, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            + Add Exercise from Library
+          </button>
+
+          <RatingBlock />
 
           {error && <div style={{ color: C.danger, fontSize: 12, marginBottom: 8, textAlign: "center" }}>{error}</div>}
           <button onClick={saveSession} disabled={saving || completed === 0}
             style={btn(completed === 0 ? C.textDim : color, { width: "100%", padding: 14, fontSize: 14, cursor: completed === 0 ? "not-allowed" : "pointer" })}>
-            {saving ? "Saving..." : `Save Session (${completed}/${exList.length} logged)`}
+            {saving ? "Saving..." : `Log Session (${completed}/${exList.length})`}
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-
-// ─── AI PLAN GENERATOR ────────────────────────────────────────────────────────
-function GeneratePlan({ clientData, clientId, clientName, onDone }) {
-  const [generating, setGenerating] = useState(false);
-  const [status, setStatus] = useState("");
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState("");
-  const [planStyle, setPlanStyle] = useState("");
-
-  const athleteType = clientData?.["Athlete Type"] || "Hybrid Athlete";
-  const goal = clientData?.["Primary Goal"] || "General Fitness";
-  const experience = clientData?.["Experience Level"] || "Beginner";
-  const days = clientData?.["Training Days Per Week"] || 3;
-  const duration = clientData?.["Session Duration min"] || 60;
-  const equipment = clientData?.["Equipment Available"] || "bodyweight only";
-  const injuries = clientData?.["Injury History"] || "none";
-  const info = ATHLETE_COLORS[athleteType] || ATHLETE_COLORS["General Fitness"];
-
-  const PLAN_STYLES = {
-    "Hybrid Athlete": ["Strength + Cardio Split", "CrossFit Style WODs", "Olympic Lifting Focus", "Endurance + Strength Balance"],
-    "Distance Runner": ["Base Building (Easy Miles)", "Speed Work (Intervals + Tempo)", "Marathon Training Block", "5K / 10K Speed Focus"],
-    "Strength Training": ["Powerlifting (Squat / Bench / Deadlift)", "Bodybuilding (Hypertrophy Split)", "Full Body 3x Per Week", "Upper / Lower Split"],
-    "General Fitness": ["Beginner Full Body", "Weight Loss Circuit", "Functional Fitness", "Maintenance Plan"],
-  };
-
-  const styles = PLAN_STYLES[athleteType] || PLAN_STYLES["General Fitness"];
-
-  const [confirmReplace, setConfirmReplace] = useState(null); // null | "checking" | "prompt"
-  const [existingPlans, setExistingPlans] = useState([]);
-
-  const checkExistingPlans = async () => {
-    if (!planStyle) { setError("Please select a plan style first."); return; }
-    setStatus("Checking existing plans...");
-    try {
-      const formula = encodeURIComponent(`{Client Name}="${clientName}"`);
-      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}?filterByFormula=${formula}`);
-      if (data.records && data.records.length > 0) {
-        setExistingPlans(data.records);
-        setConfirmReplace("prompt");
-      } else {
-        setExistingPlans([]);
-        generatePlan(false);
-      }
-    } catch {
-      generatePlan(false);
-    }
-  };
-
-  const generatePlan = async (replace = false) => {
-    setConfirmReplace(null);
-    if (!planStyle) { setError("Please select a plan style first."); return; }
-    setGenerating(true); setError(""); setStatus("Analyzing your profile...");
-    try {
-      // Delete existing plans if replacing
-      if (replace && existingPlans.length > 0) {
-        setStatus(`Removing ${existingPlans.length} existing sessions...`);
-        for (const plan of existingPlans) {
-          await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}/${plan.id}`, { method: "DELETE" });
-        }
-      }
-      setStatus("Generating your personalized plan...");
-      const prompt = `You are an expert fitness coach. Generate a complete ${days}-day per week training plan for a client with the following profile:
-- Name: ${clientName}
-- Athlete Type: ${athleteType}
-- Plan Style: ${planStyle}
-- Goal: ${goal}
-- Experience Level: ${experience}
-- Training Days Per Week: ${days}
-- Session Duration: ${duration} minutes
-- Equipment Available: ${equipment}
-- Injury History: ${injuries}
-
-Generate exactly ${days} training sessions. For each session respond with ONLY a valid JSON array like this:
-[{"planName":"Session name e.g. Monday - Strength","day":"Monday","focus":"Strength","duration":${duration},"warmUp":"Warm up description","mainBlock":"Main workout with exercises sets and reps","finishers":"Finisher exercises","coolDown":"Cool down stretches","coachNotes":"Key coaching points"}]
-
-Focus values must be one of: Strength, Cardio, Combined, Recovery, Skill
-Day values must be actual days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
-Keep each field concise (2-3 sentences max). Account for equipment: ${equipment}. Avoid: ${injuries}.
-IMPORTANT: Return ONLY the raw JSON array. Start with [ and end with ]. No markdown, no explanation.`;
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": import.meta.env.VITE_ANTHROPIC_KEY || "",
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 8000,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
-
-      const data = await res.json();
-      if (data.error) throw new Error("API: " + JSON.stringify(data.error));
-      if (!data.content || !data.content[0]) throw new Error("Empty response: " + JSON.stringify(data).slice(0, 300));
-      const text = data.content[0].text || "";
-
-      let sessions = null;
-      try { sessions = JSON.parse(text); } catch {}
-      if (!sessions) {
-        const m = text.match(/\[[\s\S]*\]/);
-        if (m) { try { sessions = JSON.parse(m[0]); } catch {} }
-      }
-      if (!sessions) {
-        const m = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-        if (m) { try { sessions = JSON.parse(m[1]); } catch {} }
-      }
-      if (!sessions || !Array.isArray(sessions)) {
-        throw new Error("Parse failed. Got: " + text.slice(0, 300));
-      }
-
-      setStatus(`Saving ${sessions.length} sessions to Airtable...`);
-      for (let i = 0; i < sessions.length; i++) {
-        const s = sessions[i];
-        setStatus(`Saving session ${i + 1} of ${sessions.length}...`);
-        await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}`, {
-          method: "POST",
-          body: JSON.stringify({ records: [{ fields: {
-            "Plan Name": s.planName || `${clientName} - ${s.day}`,
-            "Client Name": clientName,
-            "Athlete Type": athleteType,
-            "Phase": "Phase 1",
-            "Day": s.day,
-            "Focus": s.focus || "Combined",
-            "Duration min": parseInt(s.duration) || duration,
-            "Warm Up": s.warmUp || "",
-            "Main Block": s.mainBlock || "",
-            "Finishers": s.finishers || "",
-            "Cool Down": s.coolDown || "",
-            "Coach Notes": s.coachNotes || "",
-            "Status": "Active",
-          }}], typecast: true }),
-        });
-      }
-      setStatus("Plan saved successfully!");
-      setDone(true);
-    } catch (e) {
-      console.error(e);
-      setError("Generation failed: " + e.message);
-    }
-    setGenerating(false);
-  };
-
-  if (done) return (
-    <div style={{ padding: 16, textAlign: "center" }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
-      <div style={{ color: C.text, fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Plan Generated!</div>
-      <div style={{ color: C.textMuted, fontSize: 13, marginBottom: 24 }}>Your {planStyle} plan has been saved. Go to My Plan to view it.</div>
-      <button onClick={onDone} style={btn(info.color, { padding: "12px 32px", fontSize: 14 })}>View My Plan</button>
-    </div>
-  );
-
-  return (
-    <div style={{ padding: 16 }}>
-      <div style={{ background: info.color + "20", border: `1px solid ${info.color}44`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
-        <div style={{ color: info.color, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>AI PLAN GENERATOR</div>
-        <div style={{ color: C.text, fontSize: 16, fontWeight: 800, marginTop: 2 }}>{info.emoji} {athleteType}</div>
-        <div style={{ color: C.textMuted, fontSize: 12, marginTop: 4 }}>{experience} · {goal} · {days}x/week · {duration} min</div>
-      </div>
-      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
-        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>YOUR PROFILE</div>
-        {[{ label: "Equipment", value: equipment }, { label: "Injuries", value: injuries || "None" }].map(({ label, value }) => (
-          <div key={label} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-            <span style={{ color: C.textMuted, fontSize: 12, minWidth: 80 }}>{label}:</span>
-            <span style={{ color: C.text, fontSize: 12 }}>{value}</span>
-          </div>
-        ))}
-      </div>
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>SELECT PLAN STYLE</div>
-        {styles.map(style => (
-          <button key={style} onClick={() => setPlanStyle(style)}
-            style={{ width: "100%", padding: "12px 16px", borderRadius: 10, marginBottom: 8,
-              border: `2px solid ${planStyle === style ? info.color : C.darkBorder}`,
-              background: planStyle === style ? info.color + "20" : C.darkCard,
-              cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ color: planStyle === style ? info.color : C.text, fontSize: 13, fontWeight: 600 }}>{style}</span>
-            {planStyle === style && <span style={{ color: info.color, fontSize: 16 }}>✓</span>}
-          </button>
-        ))}
-      </div>
-      {confirmReplace === "prompt" && (
-        <div style={{ background: "#FFB30015", border: "1px solid #FFB30044", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-          <div style={{ color: "#FFB300", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-            You have {existingPlans.length} existing session{existingPlans.length !== 1 ? "s" : ""}
-          </div>
-          <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 14 }}>
-            Do you want to replace your current plan or add the new sessions alongside it?
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => generatePlan(true)}
-              style={btn("#EF4444", { flex: 1, padding: 10, fontSize: 12 })}>
-              Replace Old Plan
-            </button>
-            <button onClick={() => generatePlan(false)}
-              style={btn(info.color, { flex: 1, padding: 10, fontSize: 12 })}>
-              Add New Sessions
-            </button>
-          </div>
-          <button onClick={() => { setConfirmReplace(null); setStatus(""); }}
-            style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>
-            Cancel
-          </button>
-        </div>
-      )}
-      {status && !confirmReplace && (
-        <div style={{ background: info.color + "15", border: `1px solid ${info.color}44`, borderRadius: 8, padding: 12, marginBottom: 12, textAlign: "center" }}>
-          <div style={{ color: info.color, fontSize: 13, fontWeight: 600 }}>{status}</div>
-        </div>
-      )}
-      {error && <div style={{ color: C.danger, fontSize: 12, marginBottom: 12, textAlign: "center" }}>{error}</div>}
-      <button onClick={checkExistingPlans} disabled={generating || !planStyle || confirmReplace === "prompt"}
-        style={btn(planStyle && !generating ? info.color : C.textDim, { width: "100%", padding: 16, fontSize: 15, fontWeight: 800, cursor: planStyle && !generating ? "pointer" : "not-allowed" })}>
-        {generating ? status || "Generating..." : "✦ Generate Plan For Me"}
-      </button>
-      <div style={{ color: C.textDim, fontSize: 11, textAlign: "center", marginTop: 8 }}>
-        AI generates a full {days}-day plan tailored to your profile
-      </div>
     </div>
   );
 }
