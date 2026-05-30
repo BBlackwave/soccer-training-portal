@@ -3067,15 +3067,11 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
       if (sets.length > 0) {
         const setStr = sets.map((s, si) =>
           `  Set ${si+1}: ${s.reps} reps${s.weight ? " @ " + s.weight : ""}${s.note ? " — " + s.note : ""}`
-        ).join("
-");
-        lines.push(`${ex.name}:
-${setStr}`);
+        ).join("\n");
+        lines.push(`${ex.name}:\n${setStr}`);
       }
     });
-    return lines.join("
-
-");
+    return lines.join("\n\n");
   };
 
   const completed = exList.filter(ex => (logs[ex.id] || []).some(s => s.reps !== "")).length;
