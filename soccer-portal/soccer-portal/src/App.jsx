@@ -3960,26 +3960,32 @@ function FitnessAssessmentForm({ clientName, clientId, isCoach = false, onSaved,
                 </span>
               )}
               {f.minSec ? (
-                <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
-                  <input type="number" placeholder="MM" min="0" max="59"
-                    value={vals[f.key + "_min"] || ""}
-                    onChange={e => {
-                      const min = parseInt(e.target.value) || 0;
-                      const sec = parseInt(vals[f.key + "_sec"]) || 0;
-                      set(f.key + "_min", e.target.value);
-                      set(f.key, String(min * 60 + sec));
-                    }}
-                    style={{ ...inp({ fontSize: 13, textAlign: "center", width: 48, fontWeight: 700, color }), flexShrink: 0 }} />
-                  <span style={{ color: C.textMuted, fontSize: 12 }}>:</span>
-                  <input type="number" placeholder="SS" min="0" max="59"
-                    value={vals[f.key + "_sec"] || ""}
-                    onChange={e => {
-                      const sec = parseInt(e.target.value) || 0;
-                      const min = parseInt(vals[f.key + "_min"]) || 0;
-                      set(f.key + "_sec", e.target.value);
-                      set(f.key, String(min * 60 + sec));
-                    }}
-                    style={{ ...inp({ fontSize: 13, textAlign: "center", width: 48, fontWeight: 700, color }), flexShrink: 0 }} />
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                  <div style={{ textAlign: "center" }}>
+                    <input type="number" placeholder="0" min="0" max="59"
+                      value={vals[f.key + "_min"] || ""}
+                      onChange={e => {
+                        const min = parseInt(e.target.value) || 0;
+                        const sec = parseInt(vals[f.key + "_sec"]) || 0;
+                        set(f.key + "_min", e.target.value);
+                        set(f.key, String(min * 60 + sec));
+                      }}
+                      style={{ ...inp({ fontSize: 16, textAlign: "center", fontWeight: 800, color }), width: 64, flexShrink: 0 }} />
+                    <div style={{ color: C.textDim, fontSize: 9, textAlign: "center", marginTop: 2 }}>MIN</div>
+                  </div>
+                  <span style={{ color: C.textMuted, fontSize: 20, fontWeight: 800, marginBottom: 12 }}>:</span>
+                  <div style={{ textAlign: "center" }}>
+                    <input type="number" placeholder="0" min="0" max="59"
+                      value={vals[f.key + "_sec"] || ""}
+                      onChange={e => {
+                        const sec = parseInt(e.target.value) || 0;
+                        const min = parseInt(vals[f.key + "_min"]) || 0;
+                        set(f.key + "_sec", e.target.value);
+                        set(f.key, String(min * 60 + sec));
+                      }}
+                      style={{ ...inp({ fontSize: 16, textAlign: "center", fontWeight: 800, color }), width: 64, flexShrink: 0 }} />
+                    <div style={{ color: C.textDim, fontSize: 9, textAlign: "center", marginTop: 2 }}>SEC</div>
+                  </div>
                 </div>
               ) : (
                 <input type="number" step="0.1" placeholder="—" value={vals[f.key] || ""}
