@@ -3629,6 +3629,205 @@ function FitnessExerciseLibrary({ isCoach = false, userName = "" }) {
   );
 }
 
+// ─── AI PLAN GENERATOR ────────────────────────────────────────────────────────
+function GeneratePlan({ clientData, clientId, clientName, onDone }) {
+  const [generating, setGenerating] = useState(false);
+  const [status, setStatus] = useState("");
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  const [planStyle, setPlanStyle] = useState("");
+  const [confirmReplace, setConfirmReplace] = useState(null);
+  const [existingPlans, setExistingPlans] = useState([]);
+
+  const athleteType = clientData?.["Athlete Type"] || "Hybrid Athlete";
+  const goal = clientData?.["Primary Goal"] || "General Fitness";
+  const experience = clientData?.["Experience Level"] || "Beginner";
+  const days = clientData?.["Training Days Per Week"] || 3;
+  const duration = clientData?.["Session Duration min"] || 60;
+  const equipment = clientData?.["Equipment Available"] || "bodyweight only";
+  const injuries = clientData?.["Injury History"] || "none";
+  const info = ATHLETE_COLORS[athleteType] || ATHLETE_COLORS["General Fitness"];
+
+  const PLAN_STYLES = {
+    "Hybrid Athlete": ["Strength + Cardio Split", "CrossFit Style WODs", "Olympic Lifting Focus", "Endurance + Strength Balance"],
+    "Distance Runner": ["Base Building (Easy Miles)", "Speed Work (Intervals + Tempo)", "Marathon Training Block", "5K / 10K Speed Focus"],
+    "Strength Training": ["Powerlifting (Squat / Bench / Deadlift)", "Bodybuilding (Hypertrophy Split)", "Full Body 3x Per Week", "Upper / Lower Split"],
+    "General Fitness": ["Beginner Full Body", "Weight Loss Circuit", "Functional Fitness", "Maintenance Plan"],
+  };
+  const styles = PLAN_STYLES[athleteType] || PLAN_STYLES["General Fitness"];
+
+  const checkExistingPlans = async () => {
+    if (!planStyle) { setError("Please select a plan style first."); return; }
+    setStatus("Checking existing plans...");
+    try {
+      const formula = encodeURIComponent(`{Client Name}="${clientName}"`);
+      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}?filterByFormula=${formula}`);
+      if (data.records && data.records.length > 0) {
+        setExistingPlans(data.records);
+        setConfirmReplace("prompt");
+        setStatus("");
+      } else {
+        setExistingPlans([]);
+        generatePlan(false);
+      }
+    } catch { generatePlan(false); }
+  };
+
+  const generatePlan = async (replace = false) => {
+    setConfirmReplace(null);
+    setGenerating(true); setError(""); setStatus("Analyzing your profile...");
+    try {
+      if (replace && existingPlans.length > 0) {
+        setStatus(`Removing ${existingPlans.length} existing sessions...`);
+        for (const plan of existingPlans) {
+          await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}/${plan.id}`, { method: "DELETE" });
+        }
+      }
+      setStatus("Generating your personalized plan...");
+      const prompt = `You are an expert fitness coach. Generate a complete ${days}-day per week training plan for a client with the following profile:
+- Name: ${clientName}
+- Athlete Type: ${athleteType}
+- Plan Style: ${planStyle}
+- Goal: ${goal}
+- Experience Level: ${experience}
+- Training Days Per Week: ${days}
+- Session Duration: ${duration} minutes
+- Equipment Available: ${equipment}
+- Injury History: ${injuries}
+
+Generate exactly ${days} training sessions. For each session respond with ONLY a valid JSON array like this:
+[{"planName":"Session name e.g. Monday - Strength","day":"Monday","focus":"Strength","duration":${duration},"warmUp":"Warm up description","mainBlock":"Main workout with exercises sets and reps","finishers":"Finisher exercises","coolDown":"Cool down stretches","coachNotes":"Key coaching points"}]
+
+Focus values must be one of: Strength, Cardio, Combined, Recovery, Skill
+Day values must be actual days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
+Keep each field concise (2-3 sentences max). Account for equipment: ${equipment}. Avoid: ${injuries}.
+IMPORTANT: Return ONLY the raw JSON array. Start with [ and end with ]. No markdown, no explanation.`;
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": import.meta.env.VITE_ANTHROPIC_KEY || "",
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 8000, messages: [{ role: "user", content: prompt }] }),
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error("API: " + JSON.stringify(data.error));
+      if (!data.content?.[0]) throw new Error("Empty response");
+      const text = data.content[0].text || "";
+
+      let sessions = null;
+      try { sessions = JSON.parse(text); } catch {}
+      if (!sessions) { const m = text.match(/\[[\s\S]*\]/); if (m) { try { sessions = JSON.parse(m[0]); } catch {} } }
+      if (!sessions || !Array.isArray(sessions)) throw new Error("Parse failed: " + text.slice(0, 200));
+
+      for (let i = 0; i < sessions.length; i++) {
+        const s = sessions[i];
+        setStatus(`Saving session ${i + 1} of ${sessions.length}...`);
+        await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}`, {
+          method: "POST",
+          body: JSON.stringify({ records: [{ fields: {
+            "Plan Name": s.planName || `${clientName} - ${s.day}`,
+            "Client Name": clientName,
+            "Athlete Type": athleteType,
+            "Phase": "Phase 1",
+            "Day": s.day,
+            "Focus": s.focus || "Combined",
+            "Duration min": parseInt(s.duration) || duration,
+            "Warm Up": s.warmUp || "",
+            "Main Block": s.mainBlock || "",
+            "Finishers": s.finishers || "",
+            "Cool Down": s.coolDown || "",
+            "Coach Notes": s.coachNotes || "",
+            "Status": "Active",
+          }}], typecast: true }),
+        });
+      }
+      setStatus("Plan saved!");
+      setDone(true);
+    } catch (e) { setError("Generation failed: " + e.message); }
+    setGenerating(false);
+  };
+
+  if (done) return (
+    <div style={{ padding: 16, textAlign: "center" }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
+      <div style={{ color: C.text, fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Plan Generated!</div>
+      <div style={{ color: C.textMuted, fontSize: 13, marginBottom: 24 }}>Your {planStyle} plan has been saved.</div>
+      <button onClick={onDone} style={btn(info.color, { padding: "12px 32px", fontSize: 14 })}>View My Plan</button>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ background: info.color + "20", border: `1px solid ${info.color}44`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ color: info.color, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>AI PLAN GENERATOR</div>
+        <div style={{ color: C.text, fontSize: 16, fontWeight: 800, marginTop: 2 }}>{info.emoji} {athleteType}</div>
+        <div style={{ color: C.textMuted, fontSize: 12, marginTop: 4 }}>{experience} · {goal} · {days}x/week · {duration} min</div>
+      </div>
+      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>YOUR PROFILE</div>
+        {[{ label: "Equipment", value: equipment }, { label: "Injuries", value: injuries || "None" }].map(({ label, value }) => (
+          <div key={label} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+            <span style={{ color: C.textMuted, fontSize: 12, minWidth: 80 }}>{label}:</span>
+            <span style={{ color: C.text, fontSize: 12 }}>{value}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>SELECT PLAN STYLE</div>
+        {styles.map(style => (
+          <button key={style} onClick={() => setPlanStyle(style)}
+            style={{ width: "100%", padding: "12px 16px", borderRadius: 10, marginBottom: 8,
+              border: `2px solid ${planStyle === style ? info.color : C.darkBorder}`,
+              background: planStyle === style ? info.color + "20" : C.darkCard,
+              cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ color: planStyle === style ? info.color : C.text, fontSize: 13, fontWeight: 600 }}>{style}</span>
+            {planStyle === style && <span style={{ color: info.color }}>✓</span>}
+          </button>
+        ))}
+      </div>
+
+      {confirmReplace === "prompt" && (
+        <div style={{ background: "#FFB30015", border: "1px solid #FFB30044", borderRadius: 12, padding: 16, marginBottom: 12 }}>
+          <div style={{ color: "#FFB300", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+            You have {existingPlans.length} existing session{existingPlans.length !== 1 ? "s" : ""}
+          </div>
+          <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 14 }}>Replace your current plan or add new sessions alongside it?</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => generatePlan(true)} style={btn("#EF4444", { flex: 1, padding: 10, fontSize: 12 })}>Replace Old Plan</button>
+            <button onClick={() => generatePlan(false)} style={btn(info.color, { flex: 1, padding: 10, fontSize: 12 })}>Add New Sessions</button>
+          </div>
+          <button onClick={() => { setConfirmReplace(null); setStatus(""); }}
+            style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {status && !confirmReplace && (
+        <div style={{ background: info.color + "15", border: `1px solid ${info.color}44`, borderRadius: 8, padding: 12, marginBottom: 12, textAlign: "center" }}>
+          <div style={{ color: info.color, fontSize: 13, fontWeight: 600 }}>{status}</div>
+        </div>
+      )}
+      {error && <div style={{ color: C.danger, fontSize: 12, marginBottom: 12, textAlign: "center" }}>{error}</div>}
+
+      <button onClick={checkExistingPlans} disabled={generating || !planStyle || confirmReplace === "prompt"}
+        style={btn(planStyle && !generating ? info.color : C.textDim, {
+          width: "100%", padding: 16, fontSize: 15, fontWeight: 800,
+          cursor: planStyle && !generating ? "pointer" : "not-allowed" })}>
+        {generating ? status || "Generating..." : "✦ Generate Plan For Me"}
+      </button>
+      <div style={{ color: C.textDim, fontSize: 11, textAlign: "center", marginTop: 8 }}>
+        AI generates a full {days}-day plan tailored to your profile
+      </div>
+    </div>
+  );
+}
+
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [user, setUser] = useState(null);
