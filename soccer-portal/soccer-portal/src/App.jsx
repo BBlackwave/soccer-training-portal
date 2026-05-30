@@ -2417,7 +2417,6 @@ function FitnessClientDashboard({ user, onLogout }) {
     { id: "generate", label: "Generate Plan" },
     { id: "library", label: "Library" },
     { id: "assessment", label: "Assessment" },
-    { id: "dashboard", label: "Dashboard" },
     { id: "profile", label: "Profile" },
   ];
 
@@ -2497,21 +2496,31 @@ function FitnessClientDashboard({ user, onLogout }) {
       )}
       {tab === "library" && <FitnessExerciseLibrary isCoach={false} userName={user.name} />}
       {tab === "assessment" && (
-        <FitnessAssessmentForm
-          clientName={user.name}
-          clientId={clientId}
-          isCoach={false}
-          athleteType={clientData?.["Athlete Type"] || "Hybrid Athlete"}
-          onSaved={loadData}
-        />
-      )}
-      {tab === "dashboard" && (
-        <FitnessDashboard
-          clientName={user.name}
-          clientId={clientId}
-          athleteType={clientData?.["Athlete Type"] || "Hybrid Athlete"}
-          gender={clientData?.["Gender"] || "Male"}
-        />
+        <div style={{ padding: 16 }}>
+          <div style={{ color: C.text, fontSize: 18, fontWeight: 800, marginBottom: 4 }}>My Assessments</div>
+          <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 16 }}>Baseline & progress tracking</div>
+          {assessments.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
+              <div>No assessments recorded yet.</div>
+            </div>
+          ) : assessments.map(a => (
+            <div key={a.id} style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>{a.fields["Phase"] || "Assessment"}</div>
+                <div style={{ color: C.textMuted, fontSize: 11 }}>{a.fields["Assessment Date"]}</div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                {Object.entries(a.fields).filter(([k, v]) => typeof v === "number" && k !== "id").map(([k, v]) => (
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid ${C.darkBorder}` }}>
+                    <span style={{ color: C.textMuted, fontSize: 10 }}>{k.replace(/ \(.*\)/, "")}</span>
+                    <span style={{ color, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {tab === "profile" && (
@@ -2626,7 +2635,6 @@ function CoachFitnessSection({ onLogout, user }) {
     { id: "exlibrary", label: "Exercise DB" },
     { id: "users", label: "Manage Users" },
   ];
-  const [selectedClientAssess, setSelectedClientAssess] = useState(null);
 
   return (
     <div>
@@ -2708,12 +2716,6 @@ function CoachFitnessSection({ onLogout, user }) {
                           cursor: "pointer", fontWeight: 700 }}>
                         📝 Log Session
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); setSelectedClientAssess(client); }}
-                        style={{ fontSize: 10, background: "#8B5CF620", color: "#8B5CF6",
-                          border: "1px solid #8B5CF644", borderRadius: 6, padding: "3px 10px",
-                          cursor: "pointer", fontWeight: 700 }}>
-                        📊 Assess
-                      </button>
                     </div>
                   </div>
                 );
@@ -2770,24 +2772,6 @@ function CoachFitnessSection({ onLogout, user }) {
         </div>
       )}
       
-      {selectedClientAssess && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000CC", zIndex: 200, overflowY: "auto" }}>
-          <div style={{ maxWidth: 500, margin: "20px auto", background: C.dark, borderRadius: 16, overflow: "hidden" }}>
-            <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.darkBorder}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ color: C.text, fontWeight: 700 }}>Assessment — {selectedClientAssess.fields["Full Name"]}</span>
-              <button onClick={() => setSelectedClientAssess(null)}
-                style={{ background: C.darkBorder, border: "none", borderRadius: 6, padding: "4px 10px", color: C.text, cursor: "pointer", fontSize: 12 }}>✕</button>
-            </div>
-            <FitnessAssessmentForm
-              clientName={selectedClientAssess.fields["Full Name"]}
-              clientId={selectedClientAssess.id}
-              isCoach={true}
-              athleteType={selectedClientAssess.fields["Athlete Type"]?.name || selectedClientAssess.fields["Athlete Type"] || "Hybrid Athlete"}
-              onSaved={() => { setSelectedClientAssess(null); loadData(); }}
-            />
-          </div>
-        </div>
-      )}
       {selectedClientForGen && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000CC", zIndex: 200, overflowY: "auto" }}>
           <div style={{ maxWidth: 500, margin: "20px auto", background: C.dark, borderRadius: 16, overflow: "hidden" }}>
@@ -3641,541 +3625,6 @@ function FitnessExerciseLibrary({ isCoach = false, userName = "" }) {
           })}
         </div>
       )}
-    </div>
-  );
-}
-
-
-// ─── FITNESS ASSESSMENT + DASHBOARD ──────────────────────────────────────────
-const FITNESS_ASSESSMENTS_TABLE_ID = "tblXst2tVaGXcMABa";
-
-// Population benchmarks by gender
-const POP_BENCHMARKS = {
-  Male: {
-    "Push Ups Max":       { poor: 10, avg: 25, good: 35, elite: 50, unit: "reps", higher: true },
-    "Pull Ups Max":       { poor: 0,  avg: 5,  good: 10, elite: 15, unit: "reps", higher: true },
-    "Plank Hold seconds": { poor: 30, avg: 60, good: 120, elite: 180, unit: "s", higher: true },
-    "Sit Ups 60s":        { poor: 20, avg: 35, good: 45, elite: 55, unit: "reps", higher: true },
-    "Mile Time seconds":  { poor: 600, avg: 480, good: 390, elite: 330, unit: "s", higher: false },
-    "Deadlift 1RM lbs":   { poor: 100, avg: 185, good: 275, elite: 405, unit: "lbs", higher: true },
-    "Squat 1RM lbs":      { poor: 95,  avg: 165, good: 245, elite: 365, unit: "lbs", higher: true },
-    "Bench 1RM lbs":      { poor: 95,  avg: 165, good: 225, elite: 315, unit: "lbs", higher: true },
-    "Body Fat Percent":   { poor: 30, avg: 22, good: 15, elite: 10, unit: "%", higher: false },
-    "Resting Heart Rate": { poor: 80, avg: 68, good: 58, elite: 48, unit: "bpm", higher: false },
-    "VO2 Max Estimate":   { poor: 30, avg: 42, good: 52, elite: 60, unit: "ml/kg/min", higher: true },
-  },
-  Female: {
-    "Push Ups Max":       { poor: 5,  avg: 15, good: 25, elite: 40, unit: "reps", higher: true },
-    "Pull Ups Max":       { poor: 0,  avg: 2,  good: 5,  elite: 10, unit: "reps", higher: true },
-    "Plank Hold seconds": { poor: 20, avg: 45, good: 90, elite: 150, unit: "s", higher: true },
-    "Sit Ups 60s":        { poor: 15, avg: 28, good: 38, elite: 50, unit: "reps", higher: true },
-    "Mile Time seconds":  { poor: 720, avg: 570, good: 480, elite: 390, unit: "s", higher: false },
-    "Deadlift 1RM lbs":   { poor: 65, avg: 115, good: 175, elite: 265, unit: "lbs", higher: true },
-    "Squat 1RM lbs":      { poor: 65, avg: 105, good: 155, elite: 235, unit: "lbs", higher: true },
-    "Bench 1RM lbs":      { poor: 45, avg: 85,  good: 120, elite: 175, unit: "lbs", higher: true },
-    "Body Fat Percent":   { poor: 38, avg: 28, good: 22, elite: 16, unit: "%", higher: false },
-    "Resting Heart Rate": { poor: 82, avg: 70, good: 60, elite: 50, unit: "bpm", higher: false },
-    "VO2 Max Estimate":   { poor: 25, avg: 36, good: 45, elite: 55, unit: "ml/kg/min", higher: true },
-  },
-};
-
-// Experience auto-progression thresholds
-const PROGRESSION_THRESHOLDS = {
-  "Beginner": { target: "Intermediate", eliteNeeded: 0, goodNeeded: 3 },
-  "Intermediate": { target: "Advanced", eliteNeeded: 3, goodNeeded: 5 },
-};
-
-function getRatingFitness(value, bench) {
-  if (value === null || value === undefined || value === "") return null;
-  const v = parseFloat(value);
-  const { poor, avg, good, elite, higher } = bench;
-  if (higher) {
-    if (v >= elite) return { label: "Elite", color: "#10B981", score: 4 };
-    if (v >= good)  return { label: "Good",  color: "#3B82F6", score: 3 };
-    if (v >= avg)   return { label: "Average", color: "#F59E0B", score: 2 };
-    return { label: "Below Avg", color: "#EF4444", score: 1 };
-  } else {
-    if (v <= elite) return { label: "Elite", color: "#10B981", score: 4 };
-    if (v <= good)  return { label: "Good",  color: "#3B82F6", score: 3 };
-    if (v <= avg)   return { label: "Average", color: "#F59E0B", score: 2 };
-    return { label: "Below Avg", color: "#EF4444", score: 1 };
-  }
-}
-
-function FitnessAssessmentForm({ clientName, clientId, isCoach = false, onSaved, athleteType }) {
-  const info = ATHLETE_COLORS[athleteType] || ATHLETE_COLORS["General Fitness"];
-  const color = info.color;
-
-  const [phase, setPhase] = useState("Baseline");
-  const [gender, setGender] = useState("Male");
-  const [age, setAge] = useState("");
-  const [vals, setVals] = useState({});
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
-  const [levelUp, setLevelUp] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [activeSection, setActiveSection] = useState("cardio");
-
-  const set = (k, v) => setVals(p => ({ ...p, [k]: v }));
-
-  const SECTIONS = {
-    cardio: {
-      label: "Cardio & Body",
-      fields: [
-        { key: "weight", label: "Weight", unit: "lbs", field: "Weight lbs" },
-        { key: "bodyFat", label: "Body Fat", unit: "%", field: "Body Fat Percent" },
-        { key: "rhr", label: "Resting Heart Rate", unit: "bpm", field: "Resting Heart Rate" },
-        { key: "mileTime", label: "Mile Time", unit: "seconds", field: "Mile Time seconds" },
-        { key: "vo2", label: "VO2 Max Estimate", unit: "ml/kg/min", field: "VO2 Max Estimate" },
-      ]
-    },
-    strength: {
-      label: "Strength",
-      fields: [
-        { key: "pushUps", label: "Push Ups Max", unit: "reps", field: "Push Ups Max" },
-        { key: "pullUps", label: "Pull Ups Max", unit: "reps", field: "Pull Ups Max" },
-        { key: "deadlift", label: "Deadlift 1RM", unit: "lbs", field: "Deadlift 1RM lbs" },
-        { key: "squat", label: "Squat 1RM", unit: "lbs", field: "Squat 1RM lbs" },
-        { key: "bench", label: "Bench Press 1RM", unit: "lbs", field: "Bench 1RM lbs" },
-        { key: "ohp", label: "Overhead Press 1RM", unit: "lbs", field: "Overhead Press 1RM lbs" },
-      ]
-    },
-    core: {
-      label: "Core & Flex",
-      fields: [
-        { key: "plank", label: "Plank Hold", unit: "seconds", field: "Plank Hold seconds" },
-        { key: "sitUps", label: "Sit Ups (60s)", unit: "reps", field: "Sit Ups 60s" },
-        { key: "sitReach", label: "Sit and Reach", unit: "inches", field: "Sit and Reach inches" },
-      ]
-    },
-  };
-
-  const loadHistory = async () => {
-    setLoadingHistory(true);
-    try {
-      const formula = encodeURIComponent(`{Client Name}="${clientName}"`);
-      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_ASSESSMENTS_TABLE_ID}?filterByFormula=${formula}&sort[0][field]=Date&sort[0][direction]=desc`);
-      if (data.records) setHistory(data.records);
-    } catch {}
-    setLoadingHistory(false);
-    setShowHistory(true);
-  };
-
-  const checkProgression = async (ratings) => {
-    // Fetch current experience level
-    try {
-      const formula = encodeURIComponent(`{Full Name}="${clientName}"`);
-      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_CLIENTS_TABLE_ID}?filterByFormula=${formula}`);
-      if (!data.records?.[0]) return;
-      const rec = data.records[0];
-      const currentLevel = rec.fields["Experience Level"]?.name || rec.fields["Experience Level"] || "Beginner";
-      const threshold = PROGRESSION_THRESHOLDS[currentLevel];
-      if (!threshold) return;
-
-      const goodCount = ratings.filter(r => r && (r.score >= 3)).length;
-      const eliteCount = ratings.filter(r => r && r.score === 4).length;
-
-      if (goodCount >= threshold.goodNeeded && eliteCount >= threshold.eliteNeeded) {
-        // Level up!
-        await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_CLIENTS_TABLE_ID}`, {
-          method: "PATCH",
-          body: JSON.stringify({ records: [{ id: rec.id, fields: { "Experience Level": threshold.target } }], typecast: true }),
-        });
-        setLevelUp({ from: currentLevel, to: threshold.target });
-      }
-    } catch {}
-  };
-
-  const save = async () => {
-    setSaving(true); setError("");
-    const today = new Date().toISOString().split("T")[0];
-    const benchmarks = POP_BENCHMARKS[gender] || POP_BENCHMARKS.Male;
-
-    const fields = {
-      "Assessment Title": `${clientName} — ${phase} — ${today}`,
-      "Client Name": clientName,
-      "Client ID": clientId || "",
-      "Date": today,
-      "Phase": phase,
-      "Gender": gender,
-      "Age": age ? parseInt(age) : null,
-      "Notes": notes,
-      "Entered By": isCoach ? "Coach" : clientName,
-    };
-
-    const allRatings = [];
-    Object.values(SECTIONS).forEach(section => {
-      section.fields.forEach(f => {
-        if (vals[f.key] !== undefined && vals[f.key] !== "") {
-          fields[f.field] = parseFloat(vals[f.key]);
-          const bench = benchmarks[f.field];
-          if (bench) allRatings.push(getRatingFitness(vals[f.key], bench));
-        }
-      });
-    });
-
-    try {
-      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_ASSESSMENTS_TABLE_ID}`, {
-        method: "POST",
-        body: JSON.stringify({ records: [{ fields }] }),
-      });
-      if (res.records) {
-        setSaved(true);
-        await checkProgression(allRatings);
-        if (onSaved) onSaved();
-      } else setError("Save failed.");
-    } catch (e) { setError("Error: " + e.message); }
-    setSaving(false);
-  };
-
-  if (saved) return (
-    <div style={{ padding: 16, textAlign: "center" }}>
-      {levelUp ? (
-        <div style={{ background: "#FFB30020", border: "2px solid #FFB300", borderRadius: 16, padding: 24, marginBottom: 16 }}>
-          <div style={{ fontSize: 40, marginBottom: 8 }}>🎉</div>
-          <div style={{ color: "#FFB300", fontSize: 22, fontWeight: 800, marginBottom: 6 }}>Level Up!</div>
-          <div style={{ color: C.text, fontSize: 15, marginBottom: 4 }}>
-            {levelUp.from} → <span style={{ color: "#FFB300", fontWeight: 800 }}>{levelUp.to}</span>
-          </div>
-          <div style={{ color: C.textMuted, fontSize: 12 }}>Your profile has been updated automatically!</div>
-        </div>
-      ) : (
-        <div style={{ background: C.success + "20", border: `1px solid ${C.success}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
-          <div style={{ color: C.success, fontWeight: 800, fontSize: 16 }}>Assessment Saved!</div>
-        </div>
-      )}
-      <button onClick={() => { setSaved(false); setVals({}); setNotes(""); setLevelUp(null); }}
-        style={btn(color, { width: "100%", padding: 12 })}>New Assessment</button>
-    </div>
-  );
-
-  return (
-    <div style={{ padding: 16 }}>
-      <div style={{ background: color + "20", border: `1px solid ${color}44`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
-        <div style={{ color, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>FITNESS ASSESSMENT</div>
-        <div style={{ color: C.text, fontSize: 16, fontWeight: 800, marginTop: 2 }}>{clientName}</div>
-        <div style={{ color: C.textMuted, fontSize: 12 }}>Enter results to track progress and compare vs population</div>
-      </div>
-
-      {/* History button */}
-      <button onClick={loadHistory} style={btn(C.darkBorder, { width: "100%", marginBottom: 12, padding: "8px 12px", fontSize: 12 })}>
-        {loadingHistory ? "Loading..." : "📊 View Assessment History"}
-      </button>
-
-      {/* History */}
-      {showHistory && history.length > 0 && (
-        <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
-          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>ASSESSMENT HISTORY</div>
-          {history.map((r, i) => (
-            <div key={r.id} style={{ borderBottom: i < history.length - 1 ? `1px solid ${C.darkBorder}` : "none", paddingBottom: 10, marginBottom: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>{r.fields["Phase"] || "Assessment"}</span>
-                <span style={{ color: C.textMuted, fontSize: 11 }}>{r.fields["Date"]}</span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-                {Object.entries(r.fields).filter(([k, v]) => typeof v === "number").map(([k, v]) => (
-                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
-                    <span style={{ color: C.textMuted, fontSize: 10 }}>{k.replace(/ lbs| seconds| percent/gi, "")}</span>
-                    <span style={{ color, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Phase + Gender + Age */}
-      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
-        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>ASSESSMENT DETAILS</div>
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>PHASE</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {["Baseline", "Phase 1 End", "Phase 2 End", "Phase 3 End"].map(p => (
-              <button key={p} onClick={() => setPhase(p)}
-                style={{ padding: "5px 12px", borderRadius: 16, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
-                  background: phase === p ? color : C.darkBorder, color: phase === p ? "#fff" : C.textMuted }}>
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div>
-            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>GENDER</div>
-            <div style={{ display: "flex", gap: 6 }}>
-              {["Male", "Female", "Other"].map(g => (
-                <button key={g} onClick={() => setGender(g)}
-                  style={{ flex: 1, padding: "6px 4px", borderRadius: 8,
-                    border: `2px solid ${gender === g ? color : C.darkBorder}`,
-                    background: gender === g ? color + "20" : "transparent",
-                    color: gender === g ? color : C.textMuted,
-                    cursor: "pointer", fontSize: 10, fontWeight: 700 }}>
-                  {g}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 5, fontFamily: "monospace" }}>AGE</div>
-            <input type="number" placeholder="e.g. 32" value={age} onChange={e => setAge(e.target.value)}
-              style={inp({ fontSize: 13 })} />
-          </div>
-        </div>
-      </div>
-
-      {/* Section tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
-        {Object.entries(SECTIONS).map(([id, s]) => (
-          <button key={id} onClick={() => setActiveSection(id)}
-            style={{ flex: 1, padding: "8px 4px", borderRadius: 10, border: "none", cursor: "pointer",
-              fontSize: 11, fontWeight: 700,
-              background: activeSection === id ? color : C.darkBorder,
-              color: activeSection === id ? "#fff" : C.textMuted }}>
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Input fields */}
-      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
-        {SECTIONS[activeSection].fields.map(f => {
-          const bench = (POP_BENCHMARKS[gender] || POP_BENCHMARKS.Male)[f.field];
-          const rating = bench && vals[f.key] ? getRatingFitness(vals[f.key], bench) : null;
-          return (
-            <div key={f.key} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "center", marginBottom: 10 }}>
-              <div>
-                <div style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{f.label}</div>
-                <div style={{ color: C.textMuted, fontSize: 10, fontFamily: "monospace" }}>{f.unit}</div>
-              </div>
-              {rating && (
-                <span style={{ fontSize: 9, background: rating.color + "25", color: rating.color,
-                  border: `1px solid ${rating.color}44`, borderRadius: 8, padding: "2px 6px", fontWeight: 700, whiteSpace: "nowrap" }}>
-                  {rating.label}
-                </span>
-              )}
-              <input type="number" step="0.1" placeholder="—" value={vals[f.key] || ""}
-                onChange={e => set(f.key, e.target.value)}
-                style={{ ...inp({ fontSize: 14, textAlign: "right", width: 90, fontWeight: 700, color }), flexShrink: 0 }} />
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Notes */}
-      <textarea placeholder="Assessment notes..." value={notes} rows={2}
-        onChange={e => setNotes(e.target.value)}
-        style={{ ...inp({ fontSize: 12 }), resize: "none", marginBottom: 12 }} />
-
-      {error && <div style={{ color: C.danger, fontSize: 12, marginBottom: 8, textAlign: "center" }}>{error}</div>}
-      <button onClick={save} disabled={saving}
-        style={btn(color, { width: "100%", padding: 14, fontSize: 14 })}>
-        {saving ? "Saving..." : `Save ${phase} Assessment`}
-      </button>
-    </div>
-  );
-}
-
-// ─── FITNESS DASHBOARD ────────────────────────────────────────────────────────
-function FitnessDashboard({ clientName, clientId, athleteType, gender: defaultGender = "Male" }) {
-  const [assessments, setAssessments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedAssessment, setSelectedAssessment] = useState(null);
-
-  const info = ATHLETE_COLORS[athleteType] || ATHLETE_COLORS["General Fitness"];
-  const color = info.color;
-
-  useEffect(() => { loadAssessments(); }, []);
-
-  const loadAssessments = async () => {
-    setLoading(true);
-    try {
-      const formula = encodeURIComponent(`{Client Name}="${clientName}"`);
-      const data = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_ASSESSMENTS_TABLE_ID}?filterByFormula=${formula}&sort[0][field]=Date&sort[0][direction]=desc`);
-      if (data.records) {
-        setAssessments(data.records);
-        if (data.records.length > 0) setSelectedAssessment(data.records[0]);
-      }
-    } catch {}
-    setLoading(false);
-  };
-
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>Loading dashboard...</div>;
-  if (assessments.length === 0) return (
-    <div style={{ padding: 40, textAlign: "center" }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
-      <div style={{ color: C.text, fontSize: 16, fontWeight: 700, marginBottom: 8 }}>No Assessments Yet</div>
-      <div style={{ color: C.textMuted, fontSize: 13 }}>Complete your first assessment to see your dashboard.</div>
-    </div>
-  );
-
-  const f = selectedAssessment?.fields || {};
-  const gender = f["Gender"] || defaultGender;
-  const benchmarks = POP_BENCHMARKS[gender] || POP_BENCHMARKS.Male;
-
-  // Calculate overall score
-  const ratings = Object.entries(benchmarks).map(([field, bench]) => {
-    const val = f[field];
-    return val ? getRatingFitness(val, bench) : null;
-  }).filter(Boolean);
-
-  const eliteCount = ratings.filter(r => r.score === 4).length;
-  const goodCount = ratings.filter(r => r.score === 3).length;
-  const avgCount = ratings.filter(r => r.score === 2).length;
-  const belowCount = ratings.filter(r => r.score === 1).length;
-  const overallScore = ratings.length > 0 ? Math.round(ratings.reduce((a, r) => a + r.score, 0) / ratings.length * 25) : 0;
-
-  const scoreColor = overallScore >= 75 ? "#10B981" : overallScore >= 50 ? "#F59E0B" : "#EF4444";
-
-  const ALL_TEST_FIELDS = [
-    { field: "Push Ups Max", label: "Push Ups" },
-    { field: "Pull Ups Max", label: "Pull Ups" },
-    { field: "Plank Hold seconds", label: "Plank Hold" },
-    { field: "Sit Ups 60s", label: "Sit Ups (60s)" },
-    { field: "Mile Time seconds", label: "Mile Time" },
-    { field: "Deadlift 1RM lbs", label: "Deadlift 1RM" },
-    { field: "Squat 1RM lbs", label: "Squat 1RM" },
-    { field: "Bench 1RM lbs", label: "Bench 1RM" },
-    { field: "Body Fat Percent", label: "Body Fat %" },
-    { field: "Resting Heart Rate", label: "Resting HR" },
-    { field: "VO2 Max Estimate", label: "VO2 Max" },
-  ];
-
-  return (
-    <div style={{ padding: 16 }}>
-      <div style={{ color: C.text, fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Performance Dashboard</div>
-      <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 14 }}>vs {gender} Population Benchmarks</div>
-
-      {/* Assessment selector */}
-      {assessments.length > 1 && (
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 14 }}>
-          {assessments.map(a => (
-            <button key={a.id} onClick={() => setSelectedAssessment(a)}
-              style={{ padding: "5px 12px", borderRadius: 16, border: "none", cursor: "pointer",
-                fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
-                background: selectedAssessment?.id === a.id ? color : C.darkBorder,
-                color: selectedAssessment?.id === a.id ? "#fff" : C.textMuted }}>
-              {a.fields["Phase"]} · {a.fields["Date"]}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Overall score */}
-      <div style={{ background: scoreColor + "15", border: `1px solid ${scoreColor}44`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div>
-            <div style={{ color: scoreColor, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>OVERALL FITNESS SCORE</div>
-            <div style={{ color: C.textMuted, fontSize: 12 }}>{f["Phase"]} · {f["Date"]}</div>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ color: scoreColor, fontSize: 42, fontWeight: 800, fontFamily: "monospace", lineHeight: 1 }}>{overallScore}</div>
-            <div style={{ color: C.textMuted, fontSize: 10 }}>/ 100</div>
-          </div>
-        </div>
-        <div style={{ background: C.darkBorder, borderRadius: 6, height: 10, marginBottom: 12 }}>
-          <div style={{ height: 10, borderRadius: 6, width: `${overallScore}%`, background: scoreColor, transition: "width 0.8s ease" }} />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-          {[
-            { label: "Elite", count: eliteCount, color: "#10B981" },
-            { label: "Good", count: goodCount, color: "#3B82F6" },
-            { label: "Average", count: avgCount, color: "#F59E0B" },
-            { label: "Below", count: belowCount, color: "#EF4444" },
-          ].map(({ label, count, color: c }) => (
-            <div key={label} style={{ background: c + "20", border: `1px solid ${c}44`, borderRadius: 8, padding: "8px 6px", textAlign: "center" }}>
-              <div style={{ color: c, fontSize: 20, fontWeight: 800 }}>{count}</div>
-              <div style={{ color: C.textMuted, fontSize: 9 }}>{label.toUpperCase()}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Bar charts for each test */}
-      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 14, fontFamily: "monospace" }}>DETAILED BREAKDOWN vs POPULATION</div>
-        
-        {/* Legend */}
-        <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
-          {[{ color, label: "You" }, { color: "#546E7A", label: "Population Avg" }, { color: "#10B981", label: "Elite Level" }].map(l => (
-            <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <div style={{ width: 10, height: 10, borderRadius: 2, background: l.color }} />
-              <span style={{ color: C.textMuted, fontSize: 10 }}>{l.label}</span>
-            </div>
-          ))}
-        </div>
-
-        {ALL_TEST_FIELDS.filter(t => f[t.field] !== undefined && f[t.field] !== null).map(t => {
-          const bench = benchmarks[t.field];
-          if (!bench) return null;
-          const val = f[t.field];
-          const rating = getRatingFitness(val, bench);
-          const maxVal = bench.higher
-            ? Math.max(val, bench.elite) * 1.2
-            : Math.max(val, bench.poor) * 1.2;
-          const barPct = (v) => bench.higher
-            ? Math.max(5, Math.min(95, (v / maxVal) * 100))
-            : Math.max(5, Math.min(95, ((maxVal - v) / maxVal) * 100 + 20));
-
-          return (
-            <div key={t.field} style={{ marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{t.label}</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ color: C.textMuted, fontSize: 11, fontFamily: "monospace" }}>{val}{bench.unit}</span>
-                  {rating && <span style={{ fontSize: 9, background: rating.color + "25", color: rating.color, border: `1px solid ${rating.color}44`, borderRadius: 8, padding: "2px 6px", fontWeight: 700 }}>{rating.label}</span>}
-                </div>
-              </div>
-              {[
-                { label: "You", value: val, barColor: color, pct: barPct(val) },
-                { label: "Avg", value: bench.avg, barColor: "#546E7A", pct: barPct(bench.avg) },
-                { label: "Elite", value: bench.elite, barColor: "#10B981", pct: barPct(bench.elite) },
-              ].map((bar, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <span style={{ width: 32, fontSize: 9, color: C.textMuted, textAlign: "right", flexShrink: 0 }}>{bar.label}</span>
-                  <div style={{ flex: 1, background: C.darkBorder, borderRadius: 4, height: 18, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${bar.pct}%`, background: i === 0 ? bar.barColor : i === 1 ? "#37474F" : "#10B98133",
-                      border: i === 2 ? "1px solid #10B981" : "none", borderRadius: 4,
-                      display: "flex", alignItems: "center", paddingLeft: 4, transition: "width 0.6s ease" }}>
-                      <span style={{ color: i === 2 ? "#10B981" : "#fff", fontSize: 9, fontWeight: 700, fontFamily: "monospace", whiteSpace: "nowrap" }}>
-                        {bar.value}{bench.unit}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Key insights */}
-      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14 }}>
-        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>KEY INSIGHTS</div>
-        {ALL_TEST_FIELDS.filter(t => f[t.field] !== undefined).map(t => {
-          const bench = benchmarks[t.field];
-          if (!bench) return null;
-          const rating = getRatingFitness(f[t.field], bench);
-          if (!rating || (rating.score !== 4 && rating.score !== 1)) return null;
-          return (
-            <div key={t.field} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
-              padding: "8px 10px", background: rating.color + "15", border: `1px solid ${rating.color}33`, borderRadius: 8 }}>
-              <span style={{ fontSize: 14 }}>{rating.score === 4 ? "🔥" : "⚠️"}</span>
-              <div>
-                <span style={{ color: rating.color, fontSize: 12, fontWeight: 700 }}>{t.label}: </span>
-                <span style={{ color: C.textMuted, fontSize: 11 }}>
-                  {f[t.field]}{bench.unit} — {rating.score === 4 ? "Elite level!" : "Priority area"}
-                </span>
-              </div>
-            </div>
-          );
-        }).filter(Boolean)}
-      </div>
     </div>
   );
 }
