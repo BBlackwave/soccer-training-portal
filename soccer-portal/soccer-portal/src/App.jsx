@@ -3110,17 +3110,56 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
     setSaving(true); setError("");
     const today = new Date().toISOString().split("T")[0];
     const planName = mode === "custom" ? (customName || "Custom Session") : (selectedPlan?.fields["Plan Name"] || "Session");
+    const sessionTitle = `${clientName} — ${planName} — ${today}`;
+    const focus = mode === "custom" ? customFocus : (selectedPlan?.fields["Focus"]?.name || selectedPlan?.fields["Focus"] || "");
+
     try {
-      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_SESSIONS_TABLE_ID}`, {
+      // Save one record per exercise to Fitness Session Logs for time-series analysis
+      const exercisesToSave = exList.filter(ex => (logs[ex.id] || []).some(s => s.reps));
+      
+      if (exercisesToSave.length > 0) {
+        // Save each exercise as its own row with up to 5 sets
+        const records = exercisesToSave.map(ex => {
+          const sets = (logs[ex.id] || []).filter(s => s.reps);
+          const fields = {
+            "Session Title": sessionTitle,
+            "Client Name": clientName,
+            "Client ID": clientId || "",
+            "Session Date": today,
+            "Plan Name": planName,
+            "Exercise Name": ex.name,
+            "Exercise Notes": sets.map((s, i) => s.note ? `Set ${i+1}: ${s.note}` : "").filter(Boolean).join(" | "),
+            "Coach Notes": notes,
+          };
+          // Map up to 5 sets
+          sets.slice(0, 5).forEach((s, i) => {
+            fields[`Set ${i+1} Reps`] = s.reps ? parseInt(s.reps) || null : null;
+            fields[`Set ${i+1} Weight`] = s.weight ? parseFloat(s.weight) || null : null;
+          });
+          return { fields };
+        });
+
+        // Save in batches of 10
+        for (let i = 0; i < records.length; i += 10) {
+          const batch = records.slice(i, i + 10);
+          await airtableFetch(`${AIRTABLE_BASE_ID}/tblM68vWjCTPgMvCp`, {
+            method: "POST",
+            body: JSON.stringify({ records: batch }),
+          });
+        }
+      }
+
+      // Also save summary to Fitness Sessions table
+      await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_SESSIONS_TABLE_ID}`, {
         method: "POST",
         body: JSON.stringify({ records: [{ fields: {
-          "Session Title": `${clientName} — ${planName} — ${today}`,
+          "Session Title": sessionTitle,
           "Client Name": clientName,
           "Client ID": clientId || "",
           "Plan Name": planName,
           "Session Date": today,
           "Athlete Type": athleteType,
-          "Focus": mode === "custom" ? customFocus : (selectedPlan?.fields["Focus"]?.name || selectedPlan?.fields["Focus"] || ""),
+          "Focus": focus,
           "Duration min": selectedPlan?.fields["Duration min"] || 60,
           "Exercises Logged": buildLogText(),
           "Overall Notes": notes,
@@ -3128,8 +3167,9 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
           "Logged By": clientName,
         }}]}),
       });
-      if (res.records) { setSaved(true); if (onSaved) onSaved(); }
-      else setError("Save failed. Try again.");
+
+      setSaved(true);
+      if (onSaved) onSaved();
     } catch (e) { setError("Error: " + e.message); }
     setSaving(false);
   };
