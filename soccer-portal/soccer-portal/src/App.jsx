@@ -449,13 +449,13 @@ function SessionLogger({ player }) {
           "Session Title": title,
           "Session Date": today,
           "Session Type": player.planType,
-          "Duration": player.duration,
+          "Duration (min)": player.duration,
           "Coach Notes": coachNotes || notes.join("\n\n").slice(0, 400),
           "Areas to Improve": areasToImprove,
           "Progress Notes": progressNotes || notes.join("\n\n"),
           "Plan Assignment": [player.assignmentId],
           "Player": [player.id],
-        }}]}),
+        }}], typecast: true }),
       });
       if (res.records) { setSaved(true); }
       else { setError("Save failed. Try again."); }
