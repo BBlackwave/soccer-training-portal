@@ -443,9 +443,23 @@ function SessionLogger({ player }) {
       if (d.exerciseNote) notes.push(`  💬 ${d.exerciseNote}`);
     }));
     try {
-      await callClaude(`Save session log to Airtable. Base: ${AIRTABLE_BASE_ID}, Table: ${SESSION_LOGS_TABLE_ID}. Session Title: "${title}", Session Date: "${today}", Session Type: "${player.planType}", Duration: ${player.duration}, Coach Notes: ${JSON.stringify(coachNotes || notes.join("\n\n").slice(0,400))}, Areas to Improve: ${JSON.stringify(areasToImprove)}, Progress Notes: ${JSON.stringify(progressNotes || notes.join("\n\n"))}, Plan Assignment: ["${player.assignmentId}"], Player: ["${player.id}"]. Confirm when saved.`);
-      setSaved(true);
-    } catch { setError("Save failed. Try again."); }
+      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${SESSION_LOGS_TABLE_ID}`, {
+        method: "POST",
+        body: JSON.stringify({ records: [{ fields: {
+          "Session Title": title,
+          "Session Date": today,
+          "Session Type": player.planType,
+          "Duration": player.duration,
+          "Coach Notes": coachNotes || notes.join("\n\n").slice(0, 400),
+          "Areas to Improve": areasToImprove,
+          "Progress Notes": progressNotes || notes.join("\n\n"),
+          "Plan Assignment": [player.assignmentId],
+          "Player": [player.id],
+        }}]}),
+      });
+      if (res.records) { setSaved(true); }
+      else { setError("Save failed. Try again."); }
+    } catch (e) { setError("Save failed: " + e.message); }
     setSaving(false);
   };
 
