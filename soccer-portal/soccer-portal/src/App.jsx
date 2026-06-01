@@ -469,8 +469,9 @@ function SessionLogger({ player }) {
       player.blocks.forEach(b => {
         b.exercises.forEach(ex => {
           const d = exercises[ex.id];
-          const sets = (d?.sets || []).filter(s => s.reps);
-          if (sets.length > 0) {
+          const sets = d?.sets || [];
+          const anySets = sets.some(s => s.reps !== "" || s.weight !== "");
+          if (anySets) {
             const fields = {
               "Session Title": title,
               "Player Name": player.name,
@@ -482,8 +483,8 @@ function SessionLogger({ player }) {
               "Exercise Note": d?.exerciseNote || "",
             };
             sets.slice(0, 5).forEach((s, i) => {
-              fields[`Set ${i+1} Reps`] = s.reps ? parseInt(s.reps) || null : null;
-              fields[`Set ${i+1} Weight`] = s.weight ? parseFloat(s.weight) || null : null;
+              if (s.reps !== "") fields[`Set ${i+1} Reps`] = parseInt(s.reps) || 0;
+              if (s.weight !== "") fields[`Set ${i+1} Weight`] = parseFloat(s.weight) || 0;
             });
             exerciseRecords.push({ fields });
           }
@@ -491,12 +492,17 @@ function SessionLogger({ player }) {
       });
 
       // Save in batches of 10
-      for (let i = 0; i < exerciseRecords.length; i += 10) {
-        const batch = exerciseRecords.slice(i, i + 10);
-        await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}`, {
-          method: "POST",
-          body: JSON.stringify({ records: batch }),
-        });
+      if (exerciseRecords.length > 0) {
+        for (let i = 0; i < exerciseRecords.length; i += 10) {
+          const batch = exerciseRecords.slice(i, i + 10);
+          const exRes = await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}`, {
+            method: "POST",
+            body: JSON.stringify({ records: batch }),
+          });
+          if (!exRes.records) {
+            console.error("Exercise log save failed:", JSON.stringify(exRes));
+          }
+        }
       }
 
       setSaved(true);
