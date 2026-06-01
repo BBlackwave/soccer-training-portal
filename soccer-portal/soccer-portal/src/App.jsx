@@ -688,6 +688,8 @@ function ManageUsers() {
           role: r.fields["Role"]?.name || r.fields["Role"] || "",
           status: r.fields["Status"]?.name || r.fields["Status"] || "",
           playerName: r.fields["Linked Player Name"] || r.fields["flde4MGWsi1jL5M4y"] || "",
+          linkedPlayerId: r.fields["Linked Player ID"] || r.fields["fldariP3HOBd2ifw1"] || "",
+          clientId: r.fields["Client ID"] || r.fields["fldkpu62AFEBxLWiD"] || "",
         })));
       }
     } catch (e) { console.error("loadUsers error:", e); }
@@ -708,6 +710,79 @@ function ManageUsers() {
       body: JSON.stringify({ records: [{ id: userId, fields: { "fldlv5CUPNcLp5MAJ": "Denied" } }] }),
     });
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: "Denied" } : u));
+  };
+
+  const deleteUser = async (user) => {
+    const confirmMsg = `⚠️ PERMANENTLY DELETE "${user.name}"?\n\nThis will remove:\n• Their login account\n• All associated records and data\n\nThis cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setDeleting(user.id);
+    try {
+      const role = user.role?.name || user.role || "";
+
+      // Delete based on role
+      if (role === "player") {
+        // Find player record by linked player ID
+        const playerId = user.linkedPlayerId;
+        if (playerId) {
+          // Delete Session Logs linked to player
+          const logsRes = await airtableFetch(`${AIRTABLE_BASE_ID}/${SESSION_LOGS_TABLE_ID}?filterByFormula=${encodeURIComponent(`{Player}="${playerId}"`)}`);
+          for (const r of logsRes.records || []) {
+            await airtableFetch(`${AIRTABLE_BASE_ID}/${SESSION_LOGS_TABLE_ID}/${r.id}`, { method: "DELETE" });
+          }
+          // Delete Soccer Exercise Logs
+          const exLogsRes = await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}?filterByFormula=${encodeURIComponent(`{Player ID}="${playerId}"`)}`);
+          for (const r of exLogsRes.records || []) {
+            await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}/${r.id}`, { method: "DELETE" });
+          }
+          // Delete Assessments
+          const assessRes = await airtableFetch(`${AIRTABLE_BASE_ID}/tbl4ksfh0hKXmy5gT?filterByFormula=${encodeURIComponent(`{Player ID}="${playerId}"`)}`);
+          for (const r of assessRes.records || []) {
+            await airtableFetch(`${AIRTABLE_BASE_ID}/tbl4ksfh0hKXmy5gT/${r.id}`, { method: "DELETE" });
+          }
+          // Delete player record
+          await airtableFetch(`${AIRTABLE_BASE_ID}/${PLAYERS_TABLE_ID}/${playerId}`, { method: "DELETE" });
+        }
+      } else if (role === "fitness_client") {
+        const clientId = user.clientId;
+        const clientName = user.name;
+        if (clientId || clientName) {
+          // Delete Adult Training Plans
+          const formula = encodeURIComponent(`{Client Name}="${clientName}"`);
+          const plansRes = await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}?filterByFormula=${formula}`);
+          for (const r of plansRes.records || []) {
+            await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_PLANS_TABLE_ID}/${r.id}`, { method: "DELETE" });
+          }
+          // Delete Fitness Sessions summary
+          const sessRes = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_SESSIONS_TABLE_ID}?filterByFormula=${formula}`);
+          for (const r of sessRes.records || []) {
+            await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_SESSIONS_TABLE_ID}/${r.id}`, { method: "DELETE" });
+          }
+          // Delete Fitness Session Logs (exercise rows)
+          const exLogsRes = await airtableFetch(`${AIRTABLE_BASE_ID}/tblM68vWjCTPgMvCp?filterByFormula=${formula}`);
+          for (const r of exLogsRes.records || []) {
+            await airtableFetch(`${AIRTABLE_BASE_ID}/tblM68vWjCTPgMvCp/${r.id}`, { method: "DELETE" });
+          }
+          // Delete Fitness Assessments
+          const faRes = await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_ASSESSMENTS_TABLE_ID}?filterByFormula=${formula}`);
+          for (const r of faRes.records || []) {
+            await airtableFetch(`${AIRTABLE_BASE_ID}/${FITNESS_ASSESSMENTS_TABLE_ID}/${r.id}`, { method: "DELETE" });
+          }
+          // Delete Adult Client record
+          if (clientId) {
+            await airtableFetch(`${AIRTABLE_BASE_ID}/${ADULT_CLIENTS_TABLE_ID}/${clientId}`, { method: "DELETE" });
+          }
+        }
+      }
+      // parent role — just delete user record
+
+      // Always delete the User record last
+      await airtableFetch(`${AIRTABLE_BASE_ID}/${USERS_TABLE_ID}/${user.id}`, { method: "DELETE" });
+      setUsers(prev => prev.filter(u => u.id !== user.id));
+    } catch (e) {
+      alert("Delete failed: " + e.message);
+    }
+    setDeleting(null);
   };
 
   const createUser = async () => {
