@@ -425,12 +425,51 @@ function SessionLogger({ player }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [dupWarning, setDupWarning] = useState(null); // null | { dupes, pendingRecords }
 
   const allEx = player.blocks.flatMap(b => b.exercises);
   const completed = allEx.filter(ex => exercises[ex.id]?.sets.some(s => s.reps !== "")).length;
   const pct = Math.round((completed / allEx.length) * 100);
   const currentBlock = player.blocks.find(b => b.name === activeBlock);
   const updateEx = (id, data) => setExercises(prev => ({ ...prev, [id]: data }));
+
+  const saveExerciseRecords = async (records, idsToDelete) => {
+    // Delete old records if replacing
+    for (const id of idsToDelete) {
+      await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}/${id}`, { method: "DELETE" });
+    }
+    // Save in batches of 10
+    for (let i = 0; i < records.length; i += 10) {
+      const batch = records.slice(i, i + 10);
+      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}`, {
+        method: "POST",
+        body: JSON.stringify({ records: batch }),
+      });
+      if (!res.records) console.error("Exercise save failed:", JSON.stringify(res));
+    }
+  };
+
+  const handleDupChoice = async (choice) => {
+    const { dupes, exerciseRecords, existingIds } = dupWarning;
+    setDupWarning(null);
+    setSaving(true);
+    try {
+      if (choice === "skip") {
+        // Only save non-duplicate exercises
+        const dupNames = dupes.map(r => r.fields["Exercise Name"]);
+        const toSave = exerciseRecords.filter(r => !dupNames.includes(r.fields["Exercise Name"]));
+        await saveExerciseRecords(toSave, []);
+      } else if (choice === "replace") {
+        // Delete existing and save all fresh
+        await saveExerciseRecords(exerciseRecords, existingIds);
+      } else {
+        // Save anyway — keep both
+        await saveExerciseRecords(exerciseRecords, []);
+      }
+      setSaved(true);
+    } catch (e) { setError("Save failed: " + e.message); }
+    setSaving(false);
+  };
 
   const save = async () => {
     setSaving(true); setError("");
@@ -464,7 +503,7 @@ function SessionLogger({ player }) {
         setSaving(false); return;
       }
 
-      // 2. Save one row per exercise to Soccer Exercise Logs for analysis
+      // 2. Build exercise records
       const exerciseRecords = [];
       player.blocks.forEach(b => {
         b.exercises.forEach(ex => {
@@ -491,24 +530,82 @@ function SessionLogger({ player }) {
         });
       });
 
-      // Save in batches of 10
+      // 3. Check for duplicates before saving
       if (exerciseRecords.length > 0) {
-        for (let i = 0; i < exerciseRecords.length; i += 10) {
-          const batch = exerciseRecords.slice(i, i + 10);
-          const exRes = await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}`, {
-            method: "POST",
-            body: JSON.stringify({ records: batch }),
-          });
-          if (!exRes.records) {
-            console.error("Exercise log save failed:", JSON.stringify(exRes));
-          }
+        const formula = encodeURIComponent(
+          `AND({Player ID}="${player.id}",{Session Title}="${title}")`
+        );
+        const existing = await airtableFetch(
+          `${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}?filterByFormula=${formula}`
+        );
+        const existingNames = (existing.records || []).map(r => r.fields["Exercise Name"] || "");
+        const existingIds = (existing.records || []).map(r => r.id);
+        const dupes = exerciseRecords.filter(r => existingNames.includes(r.fields["Exercise Name"]));
+
+        if (dupes.length > 0) {
+          // Show warning to user — pause and let them decide
+          setSaving(false);
+          setDupWarning({ dupes, exerciseRecords, existingIds });
+          return;
         }
+        // No duplicates — save all
+        await saveExerciseRecords(exerciseRecords, []);
       }
 
       setSaved(true);
     } catch (e) { setError("Save failed: " + e.message); }
     setSaving(false);
   };
+
+  // Duplicate warning overlay
+  if (dupWarning) {
+    const dupNames = dupWarning.dupes.map(r => r.fields["Exercise Name"]);
+    return (
+      <div style={{ padding: 16 }}>
+        <div style={{ background: "#FFB30020", border: "2px solid #FFB300", borderRadius: 16, padding: 20, marginBottom: 16 }}>
+          <div style={{ fontSize: 28, marginBottom: 8, textAlign: "center" }}>⚠️</div>
+          <div style={{ color: "#FFB300", fontSize: 16, fontWeight: 800, marginBottom: 8, textAlign: "center" }}>
+            Duplicate Exercises Found
+          </div>
+          <div style={{ color: C.textMuted, fontSize: 13, marginBottom: 14, textAlign: "center" }}>
+            {dupNames.length} exercise{dupNames.length !== 1 ? "s" : ""} already logged for this session:
+          </div>
+          <div style={{ background: C.darkCard, borderRadius: 10, padding: 12, marginBottom: 16 }}>
+            {dupNames.map(name => (
+              <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0",
+                borderBottom: `1px solid ${C.darkBorder}` }}>
+                <span style={{ color: "#FFB300", fontSize: 12 }}>⚠</span>
+                <span style={{ color: C.text, fontSize: 13 }}>{name}</span>
+                <span style={{ color: C.textMuted, fontSize: 10, marginLeft: "auto" }}>Already logged</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 14, textAlign: "center" }}>
+            How would you like to handle this?
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <button onClick={() => handleDupChoice("skip")}
+              style={btn(player.color, { width: "100%", padding: 12, fontSize: 13 })}>
+              ✓ Skip Duplicates — Only save new exercises
+            </button>
+            <button onClick={() => handleDupChoice("replace")}
+              style={btn("#EF4444", { width: "100%", padding: 12, fontSize: 13 })}>
+              🔄 Replace — Delete old, save fresh data
+            </button>
+            <button onClick={() => handleDupChoice("saveAnyway")}
+              style={btn(C.darkBorder, { width: "100%", padding: 12, fontSize: 13, color: C.textMuted })}>
+              + Save Anyway — Keep both records
+            </button>
+          </div>
+          <button onClick={() => setDupWarning(null)}
+            style={{ width: "100%", marginTop: 8, background: "transparent", border: "none",
+              color: C.textDim, fontSize: 11, cursor: "pointer" }}>
+            Cancel — Go back and edit
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "12px 14px" }}>
@@ -2003,6 +2100,44 @@ function AssessmentForm({ player, readOnly = false }) {
       if (data.records) setHistory(data.records);
     } catch {}
     setLoadingHistory(false);
+  };
+
+  const saveExerciseRecords = async (records, idsToDelete) => {
+    // Delete old records if replacing
+    for (const id of idsToDelete) {
+      await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}/${id}`, { method: "DELETE" });
+    }
+    // Save in batches of 10
+    for (let i = 0; i < records.length; i += 10) {
+      const batch = records.slice(i, i + 10);
+      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}`, {
+        method: "POST",
+        body: JSON.stringify({ records: batch }),
+      });
+      if (!res.records) console.error("Exercise save failed:", JSON.stringify(res));
+    }
+  };
+
+  const handleDupChoice = async (choice) => {
+    const { dupes, exerciseRecords, existingIds } = dupWarning;
+    setDupWarning(null);
+    setSaving(true);
+    try {
+      if (choice === "skip") {
+        // Only save non-duplicate exercises
+        const dupNames = dupes.map(r => r.fields["Exercise Name"]);
+        const toSave = exerciseRecords.filter(r => !dupNames.includes(r.fields["Exercise Name"]));
+        await saveExerciseRecords(toSave, []);
+      } else if (choice === "replace") {
+        // Delete existing and save all fresh
+        await saveExerciseRecords(exerciseRecords, existingIds);
+      } else {
+        // Save anyway — keep both
+        await saveExerciseRecords(exerciseRecords, []);
+      }
+      setSaved(true);
+    } catch (e) { setError("Save failed: " + e.message); }
+    setSaving(false);
   };
 
   const save = async () => {
@@ -3889,6 +4024,44 @@ function FitnessAssessmentForm({ clientName, clientId, isCoach = false, onSaved,
         setLevelUp({ from: currentLevel, to: threshold.target });
       }
     } catch {}
+  };
+
+  const saveExerciseRecords = async (records, idsToDelete) => {
+    // Delete old records if replacing
+    for (const id of idsToDelete) {
+      await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}/${id}`, { method: "DELETE" });
+    }
+    // Save in batches of 10
+    for (let i = 0; i < records.length; i += 10) {
+      const batch = records.slice(i, i + 10);
+      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}`, {
+        method: "POST",
+        body: JSON.stringify({ records: batch }),
+      });
+      if (!res.records) console.error("Exercise save failed:", JSON.stringify(res));
+    }
+  };
+
+  const handleDupChoice = async (choice) => {
+    const { dupes, exerciseRecords, existingIds } = dupWarning;
+    setDupWarning(null);
+    setSaving(true);
+    try {
+      if (choice === "skip") {
+        // Only save non-duplicate exercises
+        const dupNames = dupes.map(r => r.fields["Exercise Name"]);
+        const toSave = exerciseRecords.filter(r => !dupNames.includes(r.fields["Exercise Name"]));
+        await saveExerciseRecords(toSave, []);
+      } else if (choice === "replace") {
+        // Delete existing and save all fresh
+        await saveExerciseRecords(exerciseRecords, existingIds);
+      } else {
+        // Save anyway — keep both
+        await saveExerciseRecords(exerciseRecords, []);
+      }
+      setSaved(true);
+    } catch (e) { setError("Save failed: " + e.message); }
+    setSaving(false);
   };
 
   const save = async () => {
