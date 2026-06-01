@@ -458,7 +458,7 @@ function SessionLogger({ player }) {
         }}], typecast: true }),
       });
       if (res.records) { setSaved(true); }
-      else { setError("Save failed. Try again."); }
+      else { setError("Save failed: " + JSON.stringify(res.error || res)); }
     } catch (e) { setError("Save failed: " + e.message); }
     setSaving(false);
   };
