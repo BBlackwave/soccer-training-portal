@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 const AIRTABLE_BASE_ID = "app0CglR4la9Jalnw";
 const USERS_TABLE_ID = "tblNMcBKZ8qnY9gRs";
 const SESSION_LOGS_TABLE_ID = "tbl5GtDcTbdhN7i0t";
+const SOCCER_EXERCISE_LOGS_TABLE_ID = "tbljpCFa5zvLFf6vD";
 const AIRTABLE_API_KEY = "patvHfCFvJbD0hKUA.08bcff4a70feac08456e9147bd64e4d76deeec47aff9158b316eb44bf6273df9";
 const AIRTABLE_MCP = { type: "url", url: "https://mcp.airtable.com/mcp", name: "airtable-mcp" };
 
@@ -443,6 +444,7 @@ function SessionLogger({ player }) {
       if (d.exerciseNote) notes.push(`  💬 ${d.exerciseNote}`);
     }));
     try {
+      // 1. Save session summary to Session Logs
       const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${SESSION_LOGS_TABLE_ID}`, {
         method: "POST",
         body: JSON.stringify({ records: [{ fields: {
@@ -457,8 +459,47 @@ function SessionLogger({ player }) {
           "Player": [player.id],
         }}], typecast: true }),
       });
-      if (res.records) { setSaved(true); }
-      else { setError("Save failed: " + JSON.stringify(res.error || res)); }
+      if (!res.records) {
+        setError("Save failed: " + JSON.stringify(res.error || res));
+        setSaving(false); return;
+      }
+
+      // 2. Save one row per exercise to Soccer Exercise Logs for analysis
+      const exerciseRecords = [];
+      player.blocks.forEach(b => {
+        b.exercises.forEach(ex => {
+          const d = exercises[ex.id];
+          const sets = (d?.sets || []).filter(s => s.reps);
+          if (sets.length > 0) {
+            const fields = {
+              "Session Title": title,
+              "Player Name": player.name,
+              "Player ID": player.id,
+              "Session Date": today,
+              "Session Type": player.planType,
+              "Exercise Name": ex.name,
+              "Plan Name": player.planName,
+              "Exercise Note": d?.exerciseNote || "",
+            };
+            sets.slice(0, 5).forEach((s, i) => {
+              fields[`Set ${i+1} Reps`] = s.reps ? parseInt(s.reps) || null : null;
+              fields[`Set ${i+1} Weight`] = s.weight ? parseFloat(s.weight) || null : null;
+            });
+            exerciseRecords.push({ fields });
+          }
+        });
+      });
+
+      // Save in batches of 10
+      for (let i = 0; i < exerciseRecords.length; i += 10) {
+        const batch = exerciseRecords.slice(i, i + 10);
+        await airtableFetch(`${AIRTABLE_BASE_ID}/${SOCCER_EXERCISE_LOGS_TABLE_ID}`, {
+          method: "POST",
+          body: JSON.stringify({ records: batch }),
+        });
+      }
+
+      setSaved(true);
     } catch (e) { setError("Save failed: " + e.message); }
     setSaving(false);
   };
