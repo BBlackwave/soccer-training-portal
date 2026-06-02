@@ -675,6 +675,7 @@ function ManageUsers() {
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [deleting, setDeleting] = useState(null);
 
   const loadUsers = async () => {
     setLoading(true);
