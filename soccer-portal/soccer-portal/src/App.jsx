@@ -4897,20 +4897,23 @@ Session Request: "${request}"
 Duration: ${duration} minutes
 Date: ${new Date().toLocaleDateString()}
 
-Return ONLY a valid JSON object like this:
+Return ONLY a valid JSON object. Each section field must have each drill or activity on its own numbered line like this:
+"warmUp": "1. Activity name (X min): Description\n2. Activity name (X min): Description\n3. Activity name (X min): Description"
+
+Use this exact format for ALL section fields:
 {
   "sessionName": "Session name",
   "focus": "Main focus area",
-  "equipment": "List of equipment needed",
-  "warmUp": "Detailed warm up (10-15 min) with specific activities",
-  "technicalBlock": "Technical drills block with progressions, reps, time",
-  "tacticalBlock": "Tactical/game situation work with instructions",
-  "conditioning": "Conditioning exercises or small sided games",
-  "coolDown": "Cool down and stretching routine",
-  "coachingPoints": "Key coaching points and cues for this session"
+  "equipment": "Comma separated list of equipment",
+  "warmUp": "1. Drill (X min): Description\n2. Drill (X min): Description\n3. Drill (X min): Description",
+  "technicalBlock": "1. Drill name (X min): Setup and instructions\n2. Drill name (X min): Setup and instructions\n3. Drill name (X min): Setup and instructions",
+  "tacticalBlock": "1. Activity (X min): Instructions\n2. Activity (X min): Instructions",
+  "conditioning": "1. Exercise (X min): Instructions\n2. Exercise (X min): Instructions",
+  "coolDown": "1. Activity (X min): Description\n2. Activity (X min): Description",
+  "coachingPoints": "1. Key point\n2. Key point\n3. Key point\n4. Key point"
 }
 
-Make it specific, detailed and appropriate for the players listed. Return ONLY the JSON object, no other text.`;
+CRITICAL: Each numbered item MUST be on its own line using \n. Never write a section as one long paragraph. Return ONLY the JSON object, no other text.`;
 
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
