@@ -4782,13 +4782,23 @@ IMPORTANT: Return ONLY the raw JSON array. Start with [ and end with ]. No markd
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem("portal_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
   const [screen, setScreen] = useState("login");
+
+  const handleLogin = (userData) => {
+    localStorage.setItem("portal_user", JSON.stringify(userData));
+    setUser(userData);
+  };
 
   if (screen === "request_soccer") return <RequestAccess onBack={() => setScreen("login")} />;
   if (screen === "request_fitness") return <FitnessRequestAccess onBack={() => setScreen("login")} />;
-  if (!user) return <Login onLogin={setUser} onRequestAccess={(type) => setScreen(type === "fitness" ? "request_fitness" : "request_soccer")} />;
-  const logout = () => { setUser(null); setScreen("login"); };
+  if (!user) return <Login onLogin={handleLogin} onRequestAccess={(type) => setScreen(type === "fitness" ? "request_fitness" : "request_soccer")} />;
+  const logout = () => { localStorage.removeItem("portal_user"); setUser(null); setScreen("login"); };
   const role = user.role?.name || user.role || "";
   if (role === "coach") return <CoachDashboard user={{...user, role: "coach"}} onLogout={logout} />;
   if (role === "player") return <PlayerDashboard user={{...user, role: "player"}} onLogout={logout} />;
