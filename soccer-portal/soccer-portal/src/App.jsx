@@ -893,6 +893,12 @@ function ManageUsers() {
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => approveUser(u.id)} style={btn(C.success, { flex: 1, padding: "8px 4px", fontSize: 12 })}>✓ Approve</button>
                 <button onClick={() => denyUser(u.id)} style={btn(C.danger, { flex: 1, padding: "8px 4px", fontSize: 12 })}>✗ Deny</button>
+                {u.role !== "coach" && (
+                  <button onClick={() => deleteUser(u)} disabled={deleting === u.id}
+                    style={btn("#7F1D1D", { padding: "8px 10px", fontSize: 12, color: "#FCA5A5" })}>
+                    {deleting === u.id ? "..." : "🗑"}
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -911,8 +917,17 @@ function ManageUsers() {
                 <div style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{u.name}</div>
                 <div style={{ color: C.textMuted, fontSize: 11 }}>{u.email} · {u.role}{u.playerName ? ` · ${u.playerName}` : ""}</div>
               </div>
-              <span style={{ fontSize: 10, background: statusColor[u.status] + "25", color: statusColor[u.status],
-                borderRadius: 12, padding: "3px 8px", fontWeight: 700 }}>{u.status}</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 10, background: statusColor[u.status] + "25", color: statusColor[u.status],
+                  borderRadius: 12, padding: "3px 8px", fontWeight: 700 }}>{u.status}</span>
+                {u.role !== "coach" && (
+                  <button onClick={() => deleteUser(u)} disabled={deleting === u.id}
+                    style={{ background: "#7F1D1D", border: "1px solid #EF444444", borderRadius: 6,
+                      padding: "4px 10px", color: "#FCA5A5", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
+                    {deleting === u.id ? "Deleting..." : "🗑 Delete"}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
