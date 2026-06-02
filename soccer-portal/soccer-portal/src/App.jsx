@@ -45,9 +45,16 @@ async function loginFromAirtable(email, password) {
 const PLAYERS_DATA = [
   {
     id: "recPaWuQLtussFtna", name: "Aaron", assignmentId: "recfOxJekU8UaVeZX",
-    planName: "Upper Body + Full Body Strength", planType: "Performance",
-    color: "#E53935", emoji: "💪", duration: 60,
+    planName: "Upper Body + Full Body Strength", planType: "Mixed",
+    color: "#E53935", emoji: "💪", duration: 75,
     blocks: [
+      { name: "Soccer Drills", exercises: [
+        { id: "a-sd-1", name: "Dynamic Warm-Up Run", prescription: "5 min", sets: 1 },
+        { id: "a-sd-2", name: "Passing Combinations (2-touch)", prescription: "3×5 min", sets: 3 },
+        { id: "a-sd-3", name: "1v1 Dribbling Moves", prescription: "3×3 min", sets: 3 },
+        { id: "a-sd-4", name: "Shooting on Goal", prescription: "3×10 shots", sets: 3 },
+        { id: "a-sd-5", name: "Small Sided Game (3v3)", prescription: "2×8 min", sets: 2 },
+      ]},
       { name: "Warm-Up", exercises: [
         { id: "a-wu-1", name: "Jump Rope", prescription: "3×1 min", sets: 3 },
         { id: "a-wu-2", name: "Arm Circles + Shoulder Rolls", prescription: "10 each", sets: 1 },
@@ -426,6 +433,7 @@ function SessionLogger({ player }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [dupWarning, setDupWarning] = useState(null); // null | { dupes, pendingRecords }
+  const [suggestedDrills, setSuggestedDrills] = useState([]);
 
   const allEx = player.blocks.flatMap(b => b.exercises);
   const completed = allEx.filter(ex => exercises[ex.id]?.sets.some(s => s.reps !== "")).length;
@@ -607,6 +615,39 @@ function SessionLogger({ player }) {
     );
   }
 
+  const [suggestingMix, setSuggestingMix] = useState(false);
+  const [mixMsg, setMixMsg] = useState("");
+
+  const suggestMix = async () => {
+    setSuggestingMix(true); setMixMsg("AI is analyzing player profile...");
+    const prompt = `You are a soccer coach. For player ${player.name} (age ${player.age}, plan type: ${player.planType}), suggest 3-5 specific soccer technical drills to add alongside their strength training. Return ONLY a JSON array like: [{"id":"d1","name":"Drill Name","prescription":"sets x duration","sets":3}]. No other text.`;
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": import.meta.env.VITE_ANTHROPIC_KEY || "", "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || "";
+      let drills = null;
+      try { drills = JSON.parse(text); } catch {}
+      if (!drills) { const m = text.match(/\[[\s\S]*\]/); if (m) try { drills = JSON.parse(m[0]); } catch {} }
+      if (drills && Array.isArray(drills)) {
+        setMixMsg(`✅ Added ${drills.length} suggested drills to Soccer Drills block!`);
+        // Add suggested drills to state - they show as extra items
+        const newDrills = drills.map((d, i) => ({ ...d, id: `suggested-${Date.now()}-${i}` }));
+        setSuggestedDrills(newDrills);
+        // Initialize exercise state for new drills
+        setExercises(prev => {
+          const updated = { ...prev };
+          newDrills.forEach(d => { updated[d.id] = { sets: Array.from({ length: d.sets || 1 }, () => ({ reps: "", weight: "", note: "" })), exerciseNote: "" }; });
+          return updated;
+        });
+      } else { setMixMsg("Could not parse suggestions. Try again."); }
+    } catch (e) { setMixMsg("Failed: " + e.message); }
+    setSuggestingMix(false);
+  };
+
   return (
     <div style={{ padding: "12px 14px" }}>
       <div style={{ background: player.color + "20", border: `1px solid ${player.color}44`, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
@@ -616,6 +657,12 @@ function SessionLogger({ player }) {
             <div style={{ color: C.text, fontSize: 15, fontWeight: 700, marginTop: 2 }}>{player.emoji} {player.name}</div>
             <div style={{ color: C.textMuted, fontSize: 11 }}>{player.planName}</div>
           </div>
+          <button onClick={suggestMix} disabled={suggestingMix}
+            style={{ background: C.blue + "25", border: `1px solid ${C.blue}44`, borderRadius: 8,
+              padding: "6px 10px", color: C.blue, fontSize: 10, cursor: "pointer", fontWeight: 700, textAlign: "center" }}>
+            {suggestingMix ? "..." : "✦ AI
+Suggest"}
+          </button>
           <div style={{ textAlign: "right" }}>
             <div style={{ color: player.color, fontSize: 24, fontWeight: 800, fontFamily: "monospace" }}>{pct}%</div>
             <div style={{ color: C.textDim, fontSize: 10 }}>{completed}/{allEx.length}</div>
@@ -949,6 +996,7 @@ function CoachDashboard({ user, onLogout }) {
   const tabs = [
     { id: "players", label: "Players" },
     { id: "session", label: "Session Logger" },
+    { id: "group", label: "Group Drills" },
     { id: "dashboard", label: "Dashboard" },
     { id: "plans", label: "Plans" },
     { id: "pmip", label: "PMIP" },
@@ -2381,7 +2429,8 @@ function PlayerDashboard({ user, onLogout }) {
         <div style={{ padding: 16 }}>
           <div style={{ color: C.text, fontSize: 18, fontWeight: 800, marginBottom: 4 }}>{player.emoji} My Training Plan</div>
           <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 16 }}>Pre-Season Phase 1 · May 26 – Jul 26</div>
-          {player.blocks.map(block => (
+          {/* Suggested drills appear under Soccer Drills block */}
+        {player.blocks.map(block => (
             <div key={block.name} style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
               <div style={{ color: player.color, fontSize: 11, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>{block.name.toUpperCase()}</div>
               {block.exercises.map(ex => (
@@ -3714,7 +3763,12 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
         </div>
       ) : (
         <div>
-          {/* Progress */}
+          {mixMsg && (
+        <div style={{ background: C.blue + "15", border: `1px solid ${C.blue}44`, borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 11, color: C.blue }}>
+          {mixMsg}
+        </div>
+      )}
+      {/* Progress */}
           <div style={{ background: color + "15", border: `1px solid ${color}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
               <span style={{ color: C.text, fontSize: 12 }}>{completed}/{exList.length} logged</span>
@@ -4776,6 +4830,290 @@ IMPORTANT: Return ONLY the raw JSON array. Start with [ and end with ]. No markd
       <div style={{ color: C.textDim, fontSize: 11, textAlign: "center", marginTop: 8 }}>
         AI generates a full {days}-day plan tailored to your profile
       </div>
+    </div>
+  );
+}
+
+
+// ─── GROUP DRILL GENERATOR ─────────────────────────────────────────────────────
+const GROUP_PLANS_TABLE_ID = "tbl5O3La7QeRbGaeJ";
+
+function GroupDrillGenerator({ onClose }) {
+  const [selectedPlayers, setSelectedPlayers] = useState([]);
+  const [request, setRequest] = useState("");
+  const [duration, setDuration] = useState("60");
+  const [generating, setGenerating] = useState(false);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [generatedPlan, setGeneratedPlan] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const togglePlayer = (p) => {
+    setSelectedPlayers(prev =>
+      prev.find(x => x.id === p.id) ? prev.filter(x => x.id !== p.id) : [...prev, p]
+    );
+  };
+
+  const generate = async () => {
+    if (selectedPlayers.length < 1) { setError("Select at least one player."); return; }
+    if (!request.trim()) { setError("Describe what you want to work on."); return; }
+    setGenerating(true); setError(""); setStatus("Generating group session...");
+
+    const playerInfo = selectedPlayers.map(p =>
+      `${p.name} (Age ${p.age}, ${p.planType})`
+    ).join(", ");
+
+    const prompt = `You are an expert soccer coach. Generate a group training session for the following players: ${playerInfo}.
+
+Session Request: "${request}"
+Duration: ${duration} minutes
+Date: ${new Date().toLocaleDateString()}
+
+Return ONLY a valid JSON object like this:
+{
+  "sessionName": "Session name",
+  "focus": "Main focus area",
+  "equipment": "List of equipment needed",
+  "warmUp": "Detailed warm up (10-15 min) with specific activities",
+  "technicalBlock": "Technical drills block with progressions, reps, time",
+  "tacticalBlock": "Tactical/game situation work with instructions",
+  "conditioning": "Conditioning exercises or small sided games",
+  "coolDown": "Cool down and stretching routine",
+  "coachingPoints": "Key coaching points and cues for this session"
+}
+
+Make it specific, detailed and appropriate for the players listed. Return ONLY the JSON object, no other text.`;
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": import.meta.env.VITE_ANTHROPIC_KEY || "",
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 4000,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error("API: " + JSON.stringify(data.error));
+      const text = data.content?.[0]?.text || "";
+
+      let plan = null;
+      try { plan = JSON.parse(text); } catch {}
+      if (!plan) {
+        const m = text.match(/\{[\s\S]*\}/);
+        if (m) { try { plan = JSON.parse(m[0]); } catch {} }
+      }
+      if (!plan) throw new Error("Could not parse plan: " + text.slice(0, 200));
+
+      plan.players = selectedPlayers.map(p => p.name).join(", ");
+      plan.ageGroups = selectedPlayers.map(p => `Age ${p.age}`).join(", ");
+      plan.duration = parseInt(duration);
+      setGeneratedPlan(plan);
+      setStatus("");
+    } catch (e) { setError("Generation failed: " + e.message); }
+    setGenerating(false);
+  };
+
+  const savePlan = async () => {
+    setSaving(true);
+    try {
+      const res = await airtableFetch(`${AIRTABLE_BASE_ID}/${GROUP_PLANS_TABLE_ID}`, {
+        method: "POST",
+        body: JSON.stringify({ records: [{ fields: {
+          "Session Name": generatedPlan.sessionName,
+          "Players": generatedPlan.players,
+          "Date": new Date().toISOString().split("T")[0],
+          "Duration min": generatedPlan.duration,
+          "Focus": generatedPlan.focus,
+          "Age Groups": generatedPlan.ageGroups,
+          "Warm Up": generatedPlan.warmUp,
+          "Technical Block": generatedPlan.technicalBlock,
+          "Tactical Block": generatedPlan.tacticalBlock,
+          "Conditioning": generatedPlan.conditioning,
+          "Cool Down": generatedPlan.coolDown,
+          "Equipment": generatedPlan.equipment,
+          "Coaching Points": generatedPlan.coachingPoints,
+          "Generated By": "AI",
+        }}]}),
+      });
+      if (res.records) setSaved(true);
+      else setError("Save failed.");
+    } catch (e) { setError("Save failed: " + e.message); }
+    setSaving(false);
+  };
+
+  const printPlan = () => {
+    const w = window.open("", "_blank");
+    const playerNames = selectedPlayers.map(p => p.name).join(", ");
+    w.document.write(`
+      <html><head><title>${generatedPlan.sessionName}</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; color: #111; }
+        h1 { color: #1E3A5F; border-bottom: 3px solid #1E3A5F; padding-bottom: 10px; }
+        h2 { color: #2563EB; margin-top: 24px; border-left: 4px solid #2563EB; padding-left: 10px; }
+        .meta { background: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 20px; }
+        .meta span { margin-right: 20px; font-weight: bold; }
+        .section { background: #fafafa; border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+        .coaching { background: #FFF8E7; border: 1px solid #F59E0B; }
+        pre { white-space: pre-wrap; font-family: Arial, sans-serif; margin: 0; line-height: 1.6; }
+        @media print { button { display: none; } }
+      </style></head>
+      <body>
+        <h1>⚽ ${generatedPlan.sessionName}</h1>
+        <div class="meta">
+          <span>👥 Players: ${playerNames}</span>
+          <span>⏱ ${generatedPlan.duration} min</span>
+          <span>🎯 ${generatedPlan.focus}</span>
+          <span>📅 ${new Date().toLocaleDateString()}</span>
+        </div>
+        <p><strong>Equipment:</strong> ${generatedPlan.equipment}</p>
+        <h2>🏃 Warm Up</h2><div class="section"><pre>${generatedPlan.warmUp}</pre></div>
+        <h2>⚽ Technical Block</h2><div class="section"><pre>${generatedPlan.technicalBlock}</pre></div>
+        <h2>🧠 Tactical Block</h2><div class="section"><pre>${generatedPlan.tacticalBlock}</pre></div>
+        <h2>💪 Conditioning</h2><div class="section"><pre>${generatedPlan.conditioning}</pre></div>
+        <h2>🧘 Cool Down</h2><div class="section"><pre>${generatedPlan.coolDown}</pre></div>
+        <h2>📋 Coaching Points</h2><div class="section coaching"><pre>${generatedPlan.coachingPoints}</pre></div>
+        <br/><button onclick="window.print()" style="background:#2563EB;color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer">🖨 Print</button>
+      </body></html>
+    `);
+    w.document.close();
+  };
+
+  // Generated plan view
+  if (generatedPlan) {
+    const sections = [
+      { label: "🏃 Warm Up", key: "warmUp", color: "#FFB300" },
+      { label: "⚽ Technical Block", key: "technicalBlock", color: "#2563EB" },
+      { label: "🧠 Tactical Block", key: "tacticalBlock", color: "#7C3AED" },
+      { label: "💪 Conditioning", key: "conditioning", color: "#EF4444" },
+      { label: "🧘 Cool Down", key: "coolDown", color: "#10B981" },
+      { label: "📋 Coaching Points", key: "coachingPoints", color: "#F59E0B" },
+    ];
+    return (
+      <div style={{ padding: 16 }}>
+        <div style={{ background: "#1E3A5F", borderRadius: 12, padding: 14, marginBottom: 14 }}>
+          <div style={{ color: "#93C5FD", fontSize: 11, letterSpacing: 1, fontFamily: "monospace" }}>GROUP SESSION PLAN</div>
+          <div style={{ color: "#fff", fontSize: 17, fontWeight: 800, marginTop: 4 }}>{generatedPlan.sessionName}</div>
+          <div style={{ color: "#93C5FD", fontSize: 12, marginTop: 4 }}>
+            {generatedPlan.players} · {generatedPlan.duration} min · {generatedPlan.focus}
+          </div>
+          {generatedPlan.equipment && (
+            <div style={{ color: "#CBD5E1", fontSize: 11, marginTop: 6 }}>📦 {generatedPlan.equipment}</div>
+          )}
+        </div>
+
+        {sections.map(s => (
+          <div key={s.key} style={{ background: C.darkCard, border: `1px solid ${s.color}44`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ color: s.color, fontSize: 11, fontWeight: 700, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>{s.label}</div>
+            <div style={{ color: C.text, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{generatedPlan[s.key]}</div>
+          </div>
+        ))}
+
+        {saved ? (
+          <div style={{ background: C.success + "20", border: `1px solid ${C.success}`, borderRadius: 10, padding: 12, textAlign: "center", marginBottom: 10 }}>
+            <div style={{ color: C.success, fontWeight: 700 }}>✅ Saved to Group Session Plans!</div>
+          </div>
+        ) : (
+          <button onClick={savePlan} disabled={saving}
+            style={btn(C.blue, { width: "100%", padding: 12, marginBottom: 8 })}>
+            {saving ? "Saving..." : "💾 Save to Airtable"}
+          </button>
+        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={printPlan}
+            style={btn("#1E3A5F", { flex: 1, padding: 12 })}>
+            🖨 Print / Export PDF
+          </button>
+          <button onClick={() => { setGeneratedPlan(null); setSaved(false); }}
+            style={btn(C.darkBorder, { flex: 1, padding: 12, color: C.textMuted })}>
+            ↩ Generate New
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ background: "#1E3A5F", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ color: "#93C5FD", fontSize: 11, letterSpacing: 1, fontFamily: "monospace" }}>AI GROUP DRILL GENERATOR</div>
+        <div style={{ color: "#fff", fontSize: 16, fontWeight: 800, marginTop: 4 }}>Generate Group Session</div>
+        <div style={{ color: "#93C5FD", fontSize: 12, marginTop: 4 }}>Select players and describe what you want</div>
+      </div>
+
+      {/* Player selector */}
+      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>SELECT PLAYERS</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {PLAYERS_DATA.map(p => {
+            const selected = selectedPlayers.find(x => x.id === p.id);
+            return (
+              <button key={p.id} onClick={() => togglePlayer(p)}
+                style={{ padding: "8px 14px", borderRadius: 20,
+                  border: `2px solid ${selected ? p.color : C.darkBorder}`,
+                  background: selected ? p.color + "25" : "transparent",
+                  cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 16 }}>{p.emoji}</span>
+                <div style={{ textAlign: "left" }}>
+                  <div style={{ color: selected ? p.color : C.text, fontSize: 13, fontWeight: 700 }}>{p.name}</div>
+                  <div style={{ color: C.textMuted, fontSize: 10 }}>Age {p.age}</div>
+                </div>
+                {selected && <span style={{ color: p.color, fontSize: 14 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+        {selectedPlayers.length > 0 && (
+          <div style={{ color: C.textMuted, fontSize: 11, marginTop: 8 }}>
+            {selectedPlayers.length} player{selectedPlayers.length !== 1 ? "s" : ""} selected: {selectedPlayers.map(p => p.name).join(", ")}
+          </div>
+        )}
+      </div>
+
+      {/* Request input */}
+      <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+        <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>WHAT DO YOU WANT TO WORK ON?</div>
+        <textarea value={request} onChange={e => setRequest(e.target.value)} rows={3}
+          placeholder="e.g. First touch and passing combinations with pressing triggers, focus on quick transitions..."
+          style={{ ...inp({ fontSize: 13 }), resize: "none" }} />
+        <div style={{ marginTop: 10 }}>
+          <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>SESSION LENGTH</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {["30", "45", "60", "75", "90"].map(d => (
+              <button key={d} onClick={() => setDuration(d)}
+                style={{ flex: 1, padding: "6px 4px", borderRadius: 8, border: "none", cursor: "pointer",
+                  fontSize: 12, fontWeight: 700,
+                  background: duration === d ? C.blue : C.darkBorder,
+                  color: duration === d ? "#fff" : C.textMuted }}>
+                {d}m
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {status && (
+        <div style={{ background: C.blue + "20", border: `1px solid ${C.blue}44`, borderRadius: 8, padding: 12, marginBottom: 12, textAlign: "center" }}>
+          <div style={{ color: C.blue, fontSize: 13, fontWeight: 600 }}>{status}</div>
+        </div>
+      )}
+      {error && <div style={{ color: C.danger, fontSize: 12, marginBottom: 10, textAlign: "center" }}>{error}</div>}
+
+      <button onClick={generate} disabled={generating || selectedPlayers.length === 0 || !request.trim()}
+        style={btn(selectedPlayers.length > 0 && request.trim() ? C.blue : C.textDim, {
+          width: "100%", padding: 14, fontSize: 15, fontWeight: 800,
+          cursor: selectedPlayers.length > 0 && request.trim() ? "pointer" : "not-allowed"
+        })}>
+        {generating ? "Generating..." : "⚽ Generate Group Session"}
+      </button>
     </div>
   );
 }
