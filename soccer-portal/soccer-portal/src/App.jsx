@@ -4975,12 +4975,23 @@ Make it specific, detailed and appropriate for the players listed. Return ONLY t
           <span>📅 ${new Date().toLocaleDateString()}</span>
         </div>
         <p><strong>Equipment:</strong> ${generatedPlan.equipment}</p>
-        <h2>🏃 Warm Up</h2><div class="section"><pre>${generatedPlan.warmUp}</pre></div>
-        <h2>⚽ Technical Block</h2><div class="section"><pre>${generatedPlan.technicalBlock}</pre></div>
-        <h2>🧠 Tactical Block</h2><div class="section"><pre>${generatedPlan.tacticalBlock}</pre></div>
-        <h2>💪 Conditioning</h2><div class="section"><pre>${generatedPlan.conditioning}</pre></div>
-        <h2>🧘 Cool Down</h2><div class="section"><pre>${generatedPlan.coolDown}</pre></div>
-        <h2>📋 Coaching Points</h2><div class="section coaching"><pre>${generatedPlan.coachingPoints}</pre></div>
+        ${[
+          ["🏃 Warm Up", generatedPlan.warmUp],
+          ["⚽ Technical Block", generatedPlan.technicalBlock],
+          ["🧠 Tactical Block", generatedPlan.tacticalBlock],
+          ["💪 Conditioning", generatedPlan.conditioning],
+          ["🧘 Cool Down", generatedPlan.coolDown],
+          ["📋 Coaching Points", generatedPlan.coachingPoints],
+        ].map(([title, text]) => {
+          const lines = (text || "").split("\n").filter(l => l.trim());
+          const items = lines.map(line => {
+            const t = line.trim();
+            if (t.endsWith(":") && t.length < 60) return "<strong>" + t + "</strong>";
+            const clean = t.replace(/^\d+\.\s*/, "").replace(/^[-•–]\s*/, "");
+            return "<li>" + clean + "</li>";
+          }).join("");
+          return "<h2>" + title + "</h2><div class=\"section\"><ul>" + items + "</ul></div>";
+        }).join("")}
         <br/><button onclick="window.print()" style="background:#2563EB;color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer">🖨 Print</button>
       </body></html>
     `);
@@ -5010,12 +5021,42 @@ Make it specific, detailed and appropriate for the players listed. Return ONLY t
           )}
         </div>
 
-        {sections.map(s => (
-          <div key={s.key} style={{ background: C.darkCard, border: `1px solid ${s.color}44`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
-            <div style={{ color: s.color, fontSize: 11, fontWeight: 700, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>{s.label}</div>
-            <div style={{ color: C.text, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{generatedPlan[s.key]}</div>
-          </div>
-        ))}
+        {sections.map(s => {
+          const lines = (generatedPlan[s.key] || "").split("\n").filter(l => l.trim());
+          return (
+            <div key={s.key} style={{ background: C.darkCard, border: `1px solid ${s.color}44`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+              <div style={{ color: s.color, fontSize: 11, fontWeight: 700, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>{s.label}</div>
+              {lines.map((line, i) => {
+                const trimmed = line.trim();
+                // Detect if line is already numbered (starts with 1. 2. etc)
+                const isNumbered = /^\d+\./.test(trimmed);
+                // Detect if line is a sub-point (starts with - or •)
+                const isSub = /^[-•–]/.test(trimmed);
+                // Detect if line is a header/label (ends with : and is short)
+                const isHeader = trimmed.endsWith(":") && trimmed.length < 60;
+                const cleanText = trimmed.replace(/^\d+\.\s*/, "").replace(/^[-•–]\s*/, "");
+                if (isHeader) return (
+                  <div key={i} style={{ color: s.color, fontSize: 11, fontWeight: 700, marginTop: i > 0 ? 10 : 0, marginBottom: 4 }}>
+                    {trimmed}
+                  </div>
+                );
+                if (isSub) return (
+                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4, paddingLeft: 16 }}>
+                    <span style={{ color: s.color, flexShrink: 0, fontSize: 12 }}>◦</span>
+                    <span style={{ color: C.textMuted, fontSize: 12, lineHeight: 1.6 }}>{cleanText}</span>
+                  </div>
+                );
+                return (
+                  <div key={i} style={{ display: "flex", gap: 10, marginBottom: 6, alignItems: "flex-start" }}>
+                    <span style={{ color: s.color, fontWeight: 700, fontSize: 12, fontFamily: "monospace",
+                      flexShrink: 0, minWidth: 20 }}>{isNumbered ? trimmed.match(/^\d+/)[0] + "." : "•"}</span>
+                    <span style={{ color: C.text, fontSize: 12, lineHeight: 1.6 }}>{cleanText}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
 
         {saved ? (
           <div style={{ background: C.success + "20", border: `1px solid ${C.success}`, borderRadius: 10, padding: 12, textAlign: "center", marginBottom: 10 }}>
