@@ -660,8 +660,7 @@ function SessionLogger({ player }) {
           <button onClick={suggestMix} disabled={suggestingMix}
             style={{ background: C.blue + "25", border: `1px solid ${C.blue}44`, borderRadius: 8,
               padding: "6px 10px", color: C.blue, fontSize: 10, cursor: "pointer", fontWeight: 700, textAlign: "center" }}>
-            {suggestingMix ? "..." : "✦ AI
-Suggest"}
+            {suggestingMix ? "..." : "✦ AI Suggest"}
           </button>
           <div style={{ textAlign: "right" }}>
             <div style={{ color: player.color, fontSize: 24, fontWeight: 800, fontFamily: "monospace" }}>{pct}%</div>
