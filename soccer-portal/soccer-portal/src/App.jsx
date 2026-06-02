@@ -1102,6 +1102,7 @@ function CoachDashboard({ user, onLogout }) {
           )}
         </div>
       )}
+      {tab === "group" && <GroupDrillGenerator />}
       {tab === "dashboard" && <PerformanceDashboard />}
       {tab === "plans" && <TrainingPlans />}
       {tab === "pmip" && <PMIPView isCoach={true} />}
