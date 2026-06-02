@@ -44,7 +44,7 @@ async function loginFromAirtable(email, password) {
 
 const PLAYERS_DATA = [
   {
-    id: "recPaWuQLtussFtna", name: "Aaron", assignmentId: "recfOxJekU8UaVeZX",
+    id: "recPaWuQLtussFtna", name: "Aaron", assignmentId: "recfOxJekU8UaVeZX", age: 14,
     planName: "Upper Body + Full Body Strength", planType: "Mixed",
     color: "#E53935", emoji: "💪", duration: 75,
     blocks: [
@@ -83,7 +83,7 @@ const PLAYERS_DATA = [
     ],
   },
   {
-    id: "rectUtNasT2HwjUwe", name: "Noah", assignmentId: "recBbFWtxi2TKe035",
+    id: "rectUtNasT2HwjUwe", name: "Noah", assignmentId: "recBbFWtxi2TKe035", age: 11,
     planName: "Passing & Shooting Combination", planType: "Technical",
     color: "#1E88E5", emoji: "⚽", duration: 60,
     blocks: [
@@ -107,7 +107,7 @@ const PLAYERS_DATA = [
     ],
   },
   {
-    id: "rec88HsXp6OYXgzg3", name: "Alexander", assignmentId: "reczaxzAUFmVSGXf3",
+    id: "rec88HsXp6OYXgzg3", name: "Alexander", assignmentId: "reczaxzAUFmVSGXf3", age: 11,
     planName: "Passing & Shooting Combination", planType: "Technical",
     color: "#43A047", emoji: "🎯", duration: 60,
     blocks: [
