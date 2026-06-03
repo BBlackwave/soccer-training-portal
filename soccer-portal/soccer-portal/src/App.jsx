@@ -3541,15 +3541,19 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
   };
 
   // Exercise log card (shared between plan and custom modes)
+  const getYouTubeUrl = useLibraryYouTubeUrls();
+  
   const ExCard = ({ ex }) => {
     const sets = logs[ex.id] || [{ reps: ex.defaultReps || "", weight: "", note: "" }];
     const done = sets.some(s => s.reps !== "");
+    const ytUrl = ex.youtubeUrl || getYouTubeUrl(ex.name);
     return (
       <div style={{ background: C.darkCard, border: `1px solid ${done ? color : C.darkBorder}`, borderRadius: 10, padding: 12, marginBottom: 8 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, flexWrap: "wrap" }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: done ? color : C.textDim, flexShrink: 0 }} />
             <span style={{ color: C.text, fontSize: 13, fontWeight: 600, textTransform: "capitalize" }}>{ex.name}</span>
+            <YouTubeButton exerciseName={ex.name} youtubeUrl={ytUrl} />
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={() => addSet(ex.id)}
@@ -4082,6 +4086,70 @@ function FitnessExerciseLibrary({ isCoach = false, userName = "" }) {
   );
 }
 
+
+
+// ─── YOUTUBE HELPERS ──────────────────────────────────────────────────────────
+function getYouTubeId(url) {
+  if (!url) return null;
+  if (url.includes("youtu.be/")) return url.split("youtu.be/")[1]?.split("?")[0];
+  return url.split("v=")[1]?.split("&")[0];
+}
+
+function YouTubeButton({ exerciseName, youtubeUrl }) {
+  if (youtubeUrl) {
+    return (
+      <a href={youtubeUrl} target="_blank" rel="noopener noreferrer"
+        style={{ fontSize: 10, background: "#EF444420", color: "#EF4444",
+          border: "1px solid #EF444433", borderRadius: 6, padding: "2px 8px",
+          fontWeight: 700, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
+        ▶ Watch
+      </a>
+    );
+  }
+  // Fallback: YouTube search button
+  const query = encodeURIComponent(`${exerciseName} exercise tutorial proper form`);
+  return (
+    <a href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noopener noreferrer"
+      style={{ fontSize: 10, background: "#F59E0B20", color: "#F59E0B",
+        border: "1px solid #F59E0B33", borderRadius: 6, padding: "2px 8px",
+        fontWeight: 700, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
+      🔍 Find Tutorial
+    </a>
+  );
+}
+
+// Hook to match exercise names against library for YouTube URLs
+function useLibraryYouTubeUrls() {
+  const [urlMap, setUrlMap] = useState({});
+  useEffect(() => {
+    airtableFetch(`${AIRTABLE_BASE_ID}/tbl5Hwmc6tqF94V2q?fields[]=Exercise Name&fields[]=YouTube URL`)
+      .then(data => {
+        if (data.records) {
+          const map = {};
+          data.records.forEach(r => {
+            const name = (r.fields["Exercise Name"] || "").toLowerCase();
+            const url = r.fields["YouTube URL"] || "";
+            if (name && url) map[name] = url;
+          });
+          setUrlMap(map);
+        }
+      })
+      .catch(() => {});
+  }, []);
+  
+  const getUrl = (exerciseName) => {
+    const name = (exerciseName || "").toLowerCase();
+    // Exact match first
+    if (urlMap[name]) return urlMap[name];
+    // Partial match - check if exercise name contains a library name
+    for (const [libName, url] of Object.entries(urlMap)) {
+      if (name.includes(libName) || libName.includes(name)) return url;
+    }
+    return null;
+  };
+  
+  return getUrl;
+}
 
 // ─── FITNESS ASSESSMENT + DASHBOARD ──────────────────────────────────────────
 const FITNESS_ASSESSMENTS_TABLE_ID = "tblXst2tVaGXcMABa";
