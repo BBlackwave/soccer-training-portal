@@ -3780,12 +3780,7 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
         </div>
       ) : (
         <div>
-          {mixMsg && (
-        <div style={{ background: C.blue + "15", border: `1px solid ${C.blue}44`, borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 11, color: C.blue }}>
-          {mixMsg}
-        </div>
-      )}
-      {/* Progress */}
+          {/* Progress */}
           <div style={{ background: color + "15", border: `1px solid ${color}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
               <span style={{ color: C.text, fontSize: 12 }}>{completed}/{exList.length} logged</span>
