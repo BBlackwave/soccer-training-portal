@@ -49,11 +49,11 @@ const PLAYERS_DATA = [
     color: "#E53935", emoji: "💪", duration: 75,
     blocks: [
       { name: "Soccer Drills", exercises: [
-        { id: "a-sd-1", name: "Dynamic Warm-Up Run", prescription: "5 min", sets: 1 },
-        { id: "a-sd-2", name: "Passing Combinations (2-touch)", prescription: "3×5 min", sets: 3 },
-        { id: "a-sd-3", name: "1v1 Dribbling Moves", prescription: "3×3 min", sets: 3 },
-        { id: "a-sd-4", name: "Shooting on Goal", prescription: "3×10 shots", sets: 3 },
-        { id: "a-sd-5", name: "Small Sided Game (3v3)", prescription: "2×8 min", sets: 2 },
+        { id: "a-sd-1", name: "Dynamic Warm-Up Run", prescription: "5 min", sets: 1, youtubeUrl: "https://www.youtube.com/watch?v=TdHqCOFi4Ls" },
+        { id: "a-sd-2", name: "Passing Combinations (2-touch)", prescription: "3×5 min", sets: 3, youtubeUrl: "https://www.youtube.com/watch?v=b9ELfwBmCEY" },
+        { id: "a-sd-3", name: "1v1 Dribbling Moves", prescription: "3×3 min", sets: 3, youtubeUrl: "https://www.youtube.com/watch?v=dCaB9_SH7KA" },
+        { id: "a-sd-4", name: "Shooting on Goal", prescription: "3×10 shots", sets: 3, youtubeUrl: "https://www.youtube.com/watch?v=JGTz59lniQM" },
+        { id: "a-sd-5", name: "Small Sided Game (3v3)", prescription: "2×8 min", sets: 2, youtubeUrl: "https://www.youtube.com/watch?v=oFPOhILpQUU" },
       ]},
       { name: "Warm-Up", exercises: [
         { id: "a-wu-1", name: "Jump Rope", prescription: "3×1 min", sets: 3 },
@@ -381,17 +381,22 @@ const setInp = { border: "1px solid #1C2D4A", borderRadius: 5, padding: "4px 6px
 
 function ExCard({ exercise, exData, onChange, color }) {
   const [open, setOpen] = useState(false);
+  const getYouTubeUrl = useLibraryYouTubeUrls();
   const any = exData.sets.some(s => s.reps !== "");
   const all = exData.sets.length > 0 && exData.sets.every(s => s.reps !== "");
+  const ytUrl = exercise.youtubeUrl || getYouTubeUrl(exercise.name);
   return (
     <div style={{ border: `1px solid ${all ? color : any ? color + "55" : C.darkBorder}`, borderRadius: 10, marginBottom: 6, overflow: "hidden", background: all ? color + "15" : C.darkCard }}>
       <div onClick={() => setOpen(!open)} style={{ padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
           <div style={{ width: 7, height: 7, borderRadius: "50%", background: all ? color : any ? color + "88" : C.textDim, flexShrink: 0 }} />
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{exercise.name}</div>
             <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "monospace" }}>{exercise.prescription}</div>
           </div>
+          <span onClick={e => e.stopPropagation()}>
+            <YouTubeButton exerciseName={exercise.name} youtubeUrl={ytUrl} isSoccer={!exercise.prescription?.includes("×") && !exercise.prescription?.includes("min")} />
+          </span>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           {all && <span style={{ fontSize: 9, background: color, color: "#fff", borderRadius: 4, padding: "2px 6px", fontWeight: 700 }}>✓</span>}
@@ -4095,7 +4100,7 @@ function getYouTubeId(url) {
   return url.split("v=")[1]?.split("&")[0];
 }
 
-function YouTubeButton({ exerciseName, youtubeUrl }) {
+function YouTubeButton({ exerciseName, youtubeUrl, isSoccer = false }) {
   if (youtubeUrl) {
     return (
       <a href={youtubeUrl} target="_blank" rel="noopener noreferrer"
@@ -4107,7 +4112,8 @@ function YouTubeButton({ exerciseName, youtubeUrl }) {
     );
   }
   // Fallback: YouTube search button
-  const query = encodeURIComponent(`${exerciseName} exercise tutorial proper form`);
+  const suffix = isSoccer ? "soccer drill tutorial" : "exercise tutorial proper form";
+  const query = encodeURIComponent(`${exerciseName} ${suffix}`);
   return (
     <a href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noopener noreferrer"
       style={{ fontSize: 10, background: "#F59E0B20", color: "#F59E0B",
