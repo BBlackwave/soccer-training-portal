@@ -3100,7 +3100,9 @@ function CoachFitnessSection({ onLogout, user }) {
             <FitnessSessionLogger
               clientId={selectedClientForLog.id}
               clientName={selectedClientForLog.fields["Full Name"]}
-              onBack={() => setSelectedClientForLog(null)}
+              plans={plans.filter(p => (p.fields["Client Name"] || "").toLowerCase() === (selectedClientForLog.fields["Full Name"] || "").toLowerCase())}
+              athleteType={selectedClientForLog.fields["Athlete Type"]?.name || selectedClientForLog.fields["Athlete Type"] || "Hybrid Athlete"}
+              onSaved={() => { setSelectedClientForLog(null); loadData(); }}
             />
           </div>
         </div>
