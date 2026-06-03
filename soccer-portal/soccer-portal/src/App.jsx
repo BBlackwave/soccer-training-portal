@@ -3387,8 +3387,23 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
 
   const selectPlan = async (plan) => {
     const f = plan.fields;
-    const parsed = parseExercisesFromPlan(f["Main Block"] || "");
-    const list = parsed.map((name, i) => ({ id: `ex-plan-${i}`, name, defaultSets: 3, defaultReps: "" }));
+    const mainBlock = f["Main Block"] || "";
+    const parsed = parseExercisesFromPlan(mainBlock);
+    
+    // Always build a list — if parsing fails, show plan text sections
+    let list = parsed.map((name, i) => ({ id: `ex-plan-${i}`, name, defaultSets: 3, defaultReps: "" }));
+    
+    // If nothing parsed, try splitting by numbered lines directly
+    if (list.length === 0 && mainBlock) {
+      const lines = mainBlock.split(/\n/).filter(l => l.trim().length > 3);
+      list = lines.slice(0, 12).map((line, i) => ({
+        id: `ex-plan-${i}`,
+        name: line.trim().replace(/^\d+[\.)]\s*/, "").replace(/\s*[–\-:]\s*\d+.*$/, "").slice(0, 70),
+        defaultSets: 3,
+        defaultReps: "",
+      })).filter(ex => ex.name.length > 3);
+    }
+
     setSelectedPlan(plan);
     setExList(list);
     const initLogs = {};
@@ -3787,7 +3802,26 @@ function FitnessSessionLogger({ clientName, clientId, plans, athleteType, onSave
             </div>
           )}
 
-          {exList.map(ex => <ExCard key={ex.id} ex={ex} />)}
+          {exList.length === 0 ? (
+            <div style={{ background: C.darkCard, border: `1px solid ${C.darkBorder}`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
+              <div style={{ color: "#FFB300", fontSize: 11, fontWeight: 700, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>PLAN DETAILS</div>
+              {["Warm Up", "Main Block", "Finishers", "Cool Down"].map(section => {
+                const val = selectedPlan?.fields[section];
+                if (!val) return null;
+                return (
+                  <div key={section} style={{ marginBottom: 10 }}>
+                    <div style={{ color: color, fontSize: 10, fontWeight: 700, marginBottom: 4, fontFamily: "monospace" }}>{section.toUpperCase()}</div>
+                    <div style={{ color: C.textMuted, fontSize: 12, lineHeight: 1.6 }}>{val}</div>
+                  </div>
+                );
+              })}
+              <div style={{ color: C.textMuted, fontSize: 12, marginTop: 8, fontStyle: "italic" }}>
+                Add exercises from the library below to log this session
+              </div>
+            </div>
+          ) : (
+            exList.map(ex => <ExCard key={ex.id} ex={ex} />)
+          )}
 
           {/* Add from library */}
           <button onClick={() => setShowPicker(true)}
