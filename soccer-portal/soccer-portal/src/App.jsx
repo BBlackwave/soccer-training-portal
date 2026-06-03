@@ -3856,7 +3856,7 @@ function FitnessExerciseLibrary({ isCoach = false, userName = "" }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newEx, setNewEx] = useState({
     name: "", muscleGroup: "Chest", equipment: "Barbell",
-    sets: "", reps: "", cue: "",
+    sets: "", reps: "", cue: "", youtubeUrl: "",
   });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
@@ -3891,7 +3891,7 @@ function FitnessExerciseLibrary({ isCoach = false, userName = "" }) {
       });
       if (res.records) {
         setSaveMsg("Exercise added to library!");
-        setNewEx({ name: "", muscleGroup: "Chest", equipment: "Barbell", sets: "", reps: "", cue: "" });
+        setNewEx({ name: "", muscleGroup: "Chest", equipment: "Barbell", sets: "", reps: "", cue: "", youtubeUrl: "" });
         setShowAdd(false);
         loadExercises();
       } else setSaveMsg("Save failed.");
@@ -3964,11 +3964,16 @@ function FitnessExerciseLibrary({ isCoach = false, userName = "" }) {
                 placeholder="e.g. 10-12" style={inp({ fontSize: 13 })} />
             </div>
           </div>
-          <div style={{ marginBottom: 14 }}>
+          <div style={{ marginBottom: 10 }}>
             <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>COACHING CUE</div>
             <textarea value={newEx.cue} onChange={e => setNewEx(p => ({ ...p, cue: e.target.value }))}
               placeholder="Key coaching point for this exercise..." rows={2}
               style={{ ...inp({ fontSize: 12 }), resize: "none" }} />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, letterSpacing: 1, marginBottom: 4, fontFamily: "monospace" }}>YOUTUBE URL (optional)</div>
+            <input value={newEx.youtubeUrl || ""} onChange={e => setNewEx(p => ({ ...p, youtubeUrl: e.target.value }))}
+              placeholder="https://www.youtube.com/watch?v=..." style={inp({ fontSize: 12 })} />
           </div>
           {saveMsg && <div style={{ color: saveMsg.includes("added") ? C.success : C.danger, fontSize: 12, marginBottom: 8 }}>{saveMsg}</div>}
           <div style={{ display: "flex", gap: 8 }}>
@@ -4031,9 +4036,16 @@ function FitnessExerciseLibrary({ isCoach = false, userName = "" }) {
                       borderRadius: 10, padding: 12, marginBottom: 6 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                         <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, flexWrap: "wrap" }}>
                             <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{f["Exercise Name"]}</span>
                             {f["Custom"] && <span style={{ fontSize: 9, background: "#FF6B3525", color: "#FF6B35", borderRadius: 6, padding: "1px 6px", fontWeight: 700 }}>CUSTOM</span>}
+                            {f["YouTube URL"] && (
+                              <a href={f["YouTube URL"]} target="_blank" rel="noopener noreferrer"
+                                style={{ fontSize: 9, background: "#EF444420", color: "#EF4444", border: "1px solid #EF444433",
+                                  borderRadius: 6, padding: "2px 7px", fontWeight: 700, textDecoration: "none", display: "flex", alignItems: "center", gap: 3 }}>
+                                ▶ Watch
+                              </a>
+                            )}
                           </div>
                           <div style={{ color: C.textMuted, fontSize: 10, fontFamily: "monospace" }}>
                             {f["Equipment"]} · {f["Default Sets"] ? `${f["Default Sets"]} sets × ` : ""}{f["Default Reps"] || ""}
@@ -4041,6 +4053,19 @@ function FitnessExerciseLibrary({ isCoach = false, userName = "" }) {
                           {f["Coaching Cue"] && (
                             <div style={{ color: "#FFB300", fontSize: 10, marginTop: 4, fontStyle: "italic" }}>
                               {f["Coaching Cue"]}
+                            </div>
+                          )}
+                          {f["YouTube URL"] && (
+                            <div style={{ marginTop: 8 }}>
+                              <iframe
+                                width="100%" height="180"
+                                src={`https://www.youtube.com/embed/${f["YouTube URL"].includes("youtu.be/") ? f["YouTube URL"].split("youtu.be/")[1]?.split("?")[0] : f["YouTube URL"].split("v=")[1]?.split("&")[0]}`}
+                                title={f["Exercise Name"]}
+                                frameBorder="0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                style={{ borderRadius: 8 }}
+                              />
                             </div>
                           )}
                         </div>
